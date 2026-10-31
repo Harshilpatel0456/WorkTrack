@@ -35,11 +35,12 @@ export const FeedbackMonitoring = () => {
   });
 
   const filteredItems = allFeedbackItems.filter((item) => {
+    const q = (searchQuery || '').toLowerCase();
     return (
-      item.authorName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.employeeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.message.toLowerCase().includes(searchQuery.toLowerCase())
+      (item.authorName || '').toLowerCase().includes(q) ||
+      (item.customerName || '').toLowerCase().includes(q) ||
+      (item.employeeName || '').toLowerCase().includes(q) ||
+      (item.message || '').toLowerCase().includes(q)
     );
   });
 

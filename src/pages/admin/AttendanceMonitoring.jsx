@@ -29,10 +29,11 @@ export const AttendanceMonitoring = () => {
   const missedCount = attendance.filter((a) => a.status === 'Missed').length;
 
   const filteredAttendance = attendance.filter((att) => {
+    const q = (searchQuery || '').toLowerCase();
     const matchesSearch =
-      att.employeeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      att.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      att.shiftName.toLowerCase().includes(searchQuery.toLowerCase());
+      (att.employeeName || '').toLowerCase().includes(q) ||
+      (att.customerName || '').toLowerCase().includes(q) ||
+      (att.shiftName || '').toLowerCase().includes(q);
 
     const matchesStatus = statusFilter === 'All' || att.status === statusFilter;
     const matchesDate = !dateFilter || att.date === dateFilter;

@@ -11,7 +11,7 @@ import {
   INITIAL_NOTIFICATION_SETTINGS,
   INITIAL_CAMERAS,
   INITIAL_HOURLY_SURVEILLANCE_BATCHES,
-} from '../data/initialData';
+} from '../data/initialData.js';
 
 const STORAGE_KEYS = {
   CUSTOMERS: 'worktrack_customers',
@@ -31,7 +31,9 @@ export const storageService = {
   getCustomers: () => {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);
-      return data ? JSON.parse(data) : INITIAL_CUSTOMERS;
+      if (!data) return INITIAL_CUSTOMERS;
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_CUSTOMERS;
     } catch {
       return INITIAL_CUSTOMERS;
     }
@@ -43,7 +45,9 @@ export const storageService = {
   getEmployees: () => {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.EMPLOYEES);
-      return data ? JSON.parse(data) : INITIAL_EMPLOYEES;
+      if (!data) return INITIAL_EMPLOYEES;
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_EMPLOYEES;
     } catch {
       return INITIAL_EMPLOYEES;
     }
@@ -55,7 +59,9 @@ export const storageService = {
   getShifts: () => {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.SHIFTS);
-      return data ? JSON.parse(data) : INITIAL_SHIFTS;
+      if (!data) return INITIAL_SHIFTS;
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_SHIFTS;
     } catch {
       return INITIAL_SHIFTS;
     }
@@ -67,7 +73,9 @@ export const storageService = {
   getAssignments: () => {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.ASSIGNMENTS);
-      return data ? JSON.parse(data) : INITIAL_ASSIGNMENTS;
+      if (!data) return INITIAL_ASSIGNMENTS;
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_ASSIGNMENTS;
     } catch {
       return INITIAL_ASSIGNMENTS;
     }
@@ -79,7 +87,9 @@ export const storageService = {
   getAttendance: () => {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.ATTENDANCE);
-      return data ? JSON.parse(data) : INITIAL_ATTENDANCE;
+      if (!data) return INITIAL_ATTENDANCE;
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_ATTENDANCE;
     } catch {
       return INITIAL_ATTENDANCE;
     }
@@ -91,7 +101,9 @@ export const storageService = {
   getReports: () => {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.REPORTS);
-      return data ? JSON.parse(data) : INITIAL_REPORTS;
+      if (!data) return INITIAL_REPORTS;
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_REPORTS;
     } catch {
       return INITIAL_REPORTS;
     }
@@ -103,7 +115,9 @@ export const storageService = {
   getNotifications: () => {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
-      return data ? JSON.parse(data) : INITIAL_NOTIFICATIONS;
+      if (!data) return INITIAL_NOTIFICATIONS;
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_NOTIFICATIONS;
     } catch {
       return INITIAL_NOTIFICATIONS;
     }
@@ -115,7 +129,9 @@ export const storageService = {
   getNotificationSettings: () => {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.NOTIF_SETTINGS);
-      return data ? JSON.parse(data) : INITIAL_NOTIFICATION_SETTINGS;
+      if (!data) return INITIAL_NOTIFICATION_SETTINGS;
+      const parsed = JSON.parse(data);
+      return parsed && typeof parsed === 'object' ? parsed : INITIAL_NOTIFICATION_SETTINGS;
     } catch {
       return INITIAL_NOTIFICATION_SETTINGS;
     }
@@ -127,7 +143,9 @@ export const storageService = {
   getCameras: () => {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.CAMERAS);
-      return data ? JSON.parse(data) : INITIAL_CAMERAS;
+      if (!data) return INITIAL_CAMERAS;
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_CAMERAS;
     } catch {
       return INITIAL_CAMERAS;
     }

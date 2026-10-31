@@ -27,11 +27,12 @@ export const DailyReportsMonitoring = () => {
   const [historyReport, setHistoryReport] = useState(null);
 
   const filteredReports = reports.filter((rep) => {
+    const q = (searchQuery || '').toLowerCase();
     const matchesSearch =
-      rep.employeeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      rep.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      rep.workCompleted.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (rep.issues && rep.issues.toLowerCase().includes(searchQuery.toLowerCase()));
+      (rep.employeeName || '').toLowerCase().includes(q) ||
+      (rep.customerName || '').toLowerCase().includes(q) ||
+      (rep.workCompleted || '').toLowerCase().includes(q) ||
+      ((rep.issues || '').toLowerCase().includes(q));
 
     const matchesCustomer = customerFilter === 'All' || rep.customerId === customerFilter;
     const matchesShift = shiftFilter === 'All' || rep.shiftId === shiftFilter;
