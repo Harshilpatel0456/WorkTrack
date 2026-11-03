@@ -1,431 +1,396 @@
-import React, { useState } from 'react';
-import { useApp } from '../../context/AppContext';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
+import { adminApi } from '../../services/adminApi';
 import {
-  Clock,
-  Plus,
-  Users,
-  Building2,
-  Calendar,
-  Edit2,
-  CheckCircle,
-  Sun,
-  Sunset,
-  Moon,
+  Calendar, Clock, Edit2, Moon, Plus, Power, Sun, Sunset, Trash2, XCircle,
 } from 'lucide-react';
 
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const EMPTY_SHIFT = {
+  name: '', startTime: '08:00', endTime: '16:00', description: '',
+  isOvernight: false, workingDays: [0, 1, 2, 3, 4, 5, 6], is_active: true,
+};
+
+const localDate = () => {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+
+const timeValue = (value) => (value || '').slice(0, 5);
+
 export const ShiftManagement = () => {
-  const { shifts, assignments, employees, customers, createShift, updateShift } = useApp();
-
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [shifts, setShifts] = useState([]);
+  const [schedules, setSchedules] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [shiftModal, setShiftModal] = useState(false);
   const [editingShift, setEditingShift] = useState(null);
-
-  const [formData, setFormData] = useState({
-    name: '',
-    startTime: '08:00 AM',
-    endTime: '04:00 PM',
-    description: '',
+  const [shiftForm, setShiftForm] = useState(EMPTY_SHIFT);
+  const [scheduleModal, setScheduleModal] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState(null);
+  const [scheduleForm, setScheduleForm] = useState({
+    assignmentId: '', shiftId: '', shiftDate: localDate(),
   });
 
-  const getShiftIcon = (name) => {
-    const n = name.toLowerCase();
-    if (n.includes('morning')) return <Sun className="w-5 h-5 text-amber-500" />;
-    if (n.includes('afternoon')) return <Sunset className="w-5 h-5 text-orange-500" />;
-    return <Moon className="w-5 h-5 text-indigo-500" />;
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [shiftRows, scheduleRows, assignmentRows, employeeRows, customerRows] = await Promise.all([
+        adminApi.shifts.list(),
+        adminApi.schedules.list(),
+        adminApi.assignments.list(),
+        adminApi.employees.list(),
+        adminApi.customers.list(),
+      ]);
+      setShifts(shiftRows);
+      setSchedules(scheduleRows);
+      setAssignments(assignmentRows);
+      setEmployees(employeeRows);
+      setCustomers(customerRows);
+      return true;
+    } catch (loadError) {
+      setError(loadError.message || 'Unable to load shift management data.');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+  const customerById = new Map(customers.map((customer) => [customer.id, customer]));
+  const activeAssignments = assignments.filter((assignment) => (
+    assignment.status === 'ACTIVE'
+    && employeeById.get(assignment.employeeId)?.status === 'ACTIVE'
+    && employeeById.get(assignment.employeeId)?.is_active !== false
+    && customerById.get(assignment.customerId)?.accountStatus !== 'SUSPENDED'
+  ));
+
+  const notifyAfter = async (message) => {
+    if (await loadData()) setNotice(message);
   };
 
-  const handleOpenCreate = () => {
-    setFormData({
-      name: '',
-      startTime: '08:00 AM',
-      endTime: '04:00 PM',
-      description: '',
-    });
-    setIsCreateModalOpen(true);
+  const saveShift = async (event) => {
+    event.preventDefault();
+    const overnight = shiftForm.endTime < shiftForm.startTime;
+    if (shiftForm.endTime === shiftForm.startTime || overnight !== shiftForm.isOvernight) {
+      setError('Use distinct times and enable overnight when the end time is earlier than the start.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      const payload = {
+        name: shiftForm.name,
+        startTime: shiftForm.startTime,
+        endTime: shiftForm.endTime,
+        description: shiftForm.description,
+        isOvernight: overnight,
+        workingDays: shiftForm.workingDays,
+        is_active: shiftForm.is_active,
+      };
+      if (editingShift) await adminApi.shifts.update(editingShift.id, payload);
+      else await adminApi.shifts.create(payload);
+      setShiftModal(false);
+      setEditingShift(null);
+      await notifyAfter(editingShift ? 'Shift template updated.' : 'Shift template created.');
+    } catch (saveError) {
+      setError(saveError.message || 'Unable to save shift template.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleOpenEdit = (shift) => {
-    setEditingShift(shift);
-    setFormData({
-      name: shift.name,
-      startTime: shift.startTime,
-      endTime: shift.endTime,
-      description: shift.description,
-    });
+  const toggleShiftDay = (day) => {
+    const days = shiftForm.workingDays.includes(day)
+      ? shiftForm.workingDays.filter((item) => item !== day)
+      : [...shiftForm.workingDays, day].sort((a, b) => a - b);
+    setShiftForm({ ...shiftForm, workingDays: days });
   };
 
-  const handleSaveCreate = (e) => {
-    e.preventDefault();
-    createShift(formData);
-    setIsCreateModalOpen(false);
+  const saveSchedule = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      const payload = {
+        assignmentId: scheduleForm.assignmentId,
+        shiftId: scheduleForm.shiftId,
+        shiftDate: scheduleForm.shiftDate,
+      };
+      if (editingSchedule) await adminApi.schedules.update(editingSchedule.id, payload);
+      else await adminApi.schedules.create(payload);
+      setScheduleModal(false);
+      setEditingSchedule(null);
+      await notifyAfter(editingSchedule ? 'Shift assignment updated.' : 'Employee scheduled.');
+    } catch (saveError) {
+      setError(saveError.message || 'Unable to save shift assignment.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleSaveEdit = (e) => {
-    e.preventDefault();
-    if (!editingShift) return;
-    updateShift(editingShift.id, formData);
+  const cancelSchedule = async (schedule) => {
+    setSaving(true);
+    setError('');
+    try {
+      await adminApi.schedules.cancel(schedule.id);
+      await notifyAfter('Shift assignment cancelled.');
+    } catch (saveError) {
+      setError(saveError.message || 'Unable to cancel shift assignment.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleShiftToggle = async (shift) => {
+    setSaving(true);
+    setError('');
+    try {
+      await adminApi.shifts.update(shift.id, { is_active: !shift.is_active });
+      await notifyAfter(`Shift ${shift.is_active ? 'deactivated' : 'activated'}.`);
+    } catch (saveError) {
+      setError(saveError.message || 'Unable to change shift status.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteShift = async (shift) => {
+    if (!window.confirm(`Delete "${shift.name}"? Shifts with existing schedules must be deactivated instead.`)) return;
+    setSaving(true);
+    setError('');
+    try {
+      await adminApi.shifts.remove(shift.id);
+      await notifyAfter('Shift template deleted.');
+    } catch (deleteError) {
+      setError(deleteError.message || 'Unable to delete shift template.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openNewShift = () => {
     setEditingShift(null);
+    setShiftForm({ ...EMPTY_SHIFT, workingDays: [...EMPTY_SHIFT.workingDays] });
+    setError('');
+    setShiftModal(true);
+  };
+
+  const openEditShift = (shift) => {
+    setEditingShift(shift);
+    setShiftForm({
+      ...EMPTY_SHIFT,
+      ...shift,
+      startTime: timeValue(shift.startTime),
+      endTime: timeValue(shift.endTime),
+      workingDays: shift.workingDays || [0, 1, 2, 3, 4, 5, 6],
+    });
+    setError('');
+    setShiftModal(true);
+  };
+
+  const openNewSchedule = () => {
+    setEditingSchedule(null);
+    setScheduleForm({
+      assignmentId: activeAssignments[0]?.id || '',
+      shiftId: shifts.find((shift) => shift.is_active)?.id || '',
+      shiftDate: localDate(),
+    });
+    setError('');
+    setScheduleModal(true);
+  };
+
+  const openEditSchedule = (schedule) => {
+    setEditingSchedule(schedule);
+    setScheduleForm({
+      assignmentId: schedule.assignmentId,
+      shiftId: schedule.shiftId,
+      shiftDate: schedule.shiftDate,
+    });
+    setError('');
+    setScheduleModal(true);
+  };
+
+  const getShiftIcon = (name) => {
+    const value = name.toLowerCase();
+    if (value.includes('morning')) return <Sun className="w-5 h-5 text-amber-500" />;
+    if (value.includes('afternoon')) return <Sunset className="w-5 h-5 text-orange-500" />;
+    return <Moon className="w-5 h-5 text-indigo-500" />;
   };
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
+      {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div>}
+      {notice && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700">{notice}</div>}
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <Clock className="w-6 h-6 text-[#245CE2]" />
-            Shift Template & Schedule Architecture
+            <Clock className="w-6 h-6 text-[#245CE2]" /> Shift Templates & Schedules
           </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Configure enterprise shift windows, operational intervals, and multi-staff coverage models.
-          </p>
+          <p className="text-xs text-slate-500 mt-1">Configure recurring shift windows and schedule employees for specific dates.</p>
         </div>
-
-        <button
-          onClick={handleOpenCreate}
-          className="bg-[#245CE2] hover:bg-[#1A45B0] text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all shadow-md self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          Create New Shift
-        </button>
+        <div className="flex gap-2">
+          <button onClick={openNewShift} className="bg-white border border-slate-200 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2">
+            <Plus className="w-4 h-4" /> New Template
+          </button>
+          <button onClick={openNewSchedule} disabled={!activeAssignments.length || !shifts.some((shift) => shift.is_active)} className="bg-[#245CE2] disabled:opacity-50 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md">
+            <Calendar className="w-4 h-4" /> Schedule Employee
+          </button>
+        </div>
       </div>
 
-      {/* Shift Templates Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {shifts.map((shift) => {
-          // Find personnel assigned to this shift
-          const shiftAssignments = assignments.filter(
-            (a) => a.shiftId === shift.id && a.status === 'Approved'
-          );
-
-          return (
-            <div
-              key={shift.id}
-              className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-subtle hover:shadow-card transition-all flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                      {getShiftIcon(shift.name)}
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-slate-900 text-sm">{shift.name}</h3>
-                      <p className="text-[11px] font-mono font-bold text-[#245CE2] mt-0.5">
-                        {shift.startTime} – {shift.endTime}
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => handleOpenEdit(shift)}
-                    className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-                    title="Edit Shift Window"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                <p className="text-xs text-slate-500 leading-relaxed mb-4 min-h-[36px]">
-                  {shift.description}
-                </p>
-
-                {/* Allocated Personnel */}
-                <div className="pt-3 border-t border-slate-100">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5 text-[#245CE2]" />
-                      Personnel Allocated ({shiftAssignments.length})
-                    </span>
-                  </div>
-
-                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                    {shiftAssignments.length === 0 ? (
-                      <div className="text-[11px] text-slate-400 italic py-2">
-                        No active staff assigned to this shift.
+      <section>
+        <h3 className="text-sm font-bold text-slate-900 mb-3">Shift Templates</h3>
+        {loading ? (
+          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-xs text-slate-400">Loading shifts…</div>
+        ) : shifts.length === 0 ? (
+          <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-xs text-slate-400">No shift templates yet.</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            {shifts.map((shift) => {
+              const people = schedules.filter((item) => item.shiftId === shift.id && item.status !== 'CANCELLED');
+              return (
+                <article key={shift.id} className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-subtle">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">{getShiftIcon(shift.name)}</div>
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-sm">{shift.name}</h4>
+                        <p className="text-[11px] font-mono font-bold text-[#245CE2] mt-0.5">
+                          {timeValue(shift.startTime)} – {timeValue(shift.endTime)}{shift.isOvernight ? ' (+1 day)' : ''}
+                        </p>
                       </div>
-                    ) : (
-                      shiftAssignments.map((asg) => (
-                        <div
-                          key={asg.id}
-                          className="p-2 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between text-xs"
-                        >
-                          <span className="font-semibold text-slate-800">{asg.employeeName}</span>
-                          <span className="text-[10px] text-slate-500 font-medium bg-white px-2 py-0.5 rounded border border-slate-200 truncate max-w-[130px]">
-                            {asg.customerName}
-                          </span>
-                        </div>
-                      ))
-                    )}
+                    </div>
+                    <Badge status={shift.is_active ? 'Active' : 'Inactive'} />
                   </div>
-                </div>
-              </div>
+                  <p className="text-xs text-slate-500 leading-relaxed mt-3 min-h-8">{shift.description || 'No description provided.'}</p>
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {(shift.workingDays || []).map((day) => (
+                      <span key={day} className="rounded-md bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-700">{WEEKDAYS[day]}</span>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[11px] text-slate-500">{people.length} scheduled shifts</p>
+                  <div className="mt-4 flex justify-end gap-1 border-t border-slate-100 pt-3">
+                    <button onClick={() => openEditShift(shift)} title="Edit template" className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg"><Edit2 className="w-4 h-4" /></button>
+                    <button onClick={() => handleShiftToggle(shift)} disabled={saving} title={shift.is_active ? 'Deactivate template' : 'Activate template'} className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg"><Power className="w-4 h-4" /></button>
+                    <button onClick={() => deleteShift(shift)} disabled={saving} title="Delete template" className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
-              {/* Card Footer */}
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
-                <span>Standard 8-hour window</span>
-                <span className="font-bold text-emerald-600 flex items-center gap-1">
-                  <CheckCircle className="w-3 h-3" /> System Standard
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Allocation Matrix Visualizer */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-subtle">
-        <h3 className="text-sm font-bold text-slate-900 mb-1">Customer Shift Coverage Matrix</h3>
-        <p className="text-xs text-slate-500 mb-4">
-          Visualizing that different employees are seamlessly assigned to the same customer across separate shift intervals.
-        </p>
-
+      <section className="bg-white rounded-2xl border border-slate-200/80 shadow-subtle overflow-hidden">
+        <div className="p-5 border-b border-slate-100">
+          <h3 className="text-sm font-bold text-slate-900">Employee Schedule</h3>
+          <p className="text-xs text-slate-500 mt-1">Schedules are date-specific; overlapping shifts for an employee are rejected.</p>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold text-[11px]">
-                <th className="py-3 px-4">Client Enterprise</th>
-                <th className="py-3 px-4">Morning Shift (06:00 - 14:00)</th>
-                <th className="py-3 px-4">Afternoon Shift (14:00 - 22:00)</th>
-                <th className="py-3 px-4">Night Shift (22:00 - 06:00)</th>
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider text-[10px]">
+              <tr>
+                <th className="px-4 py-3">Date</th><th className="px-4 py-3">Employee</th><th className="px-4 py-3">Customer</th>
+                <th className="px-4 py-3">Shift</th><th className="px-4 py-3">Status</th><th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {customers.map((cust) => {
-                const morningStaff = assignments.filter(
-                  (a) => a.customerId === cust.id && a.shiftId === 'shift-1' && a.status === 'Approved'
-                );
-                const afternoonStaff = assignments.filter(
-                  (a) => a.customerId === cust.id && a.shiftId === 'shift-2' && a.status === 'Approved'
-                );
-                const nightStaff = assignments.filter(
-                  (a) => a.customerId === cust.id && a.shiftId === 'shift-3' && a.status === 'Approved'
-                );
-
-                return (
-                  <tr key={cust.id} className="hover:bg-slate-50/50">
-                    <td className="py-3.5 px-4 font-bold text-slate-900 flex items-center gap-2">
-                      <div
-                        className="w-6 h-6 rounded-md flex items-center justify-center text-white text-[10px] font-bold"
-                        style={{ backgroundColor: cust.color || '#245CE2' }}
-                      >
-                        {cust.logoLetter}
-                      </div>
-                      {cust.companyName}
-                    </td>
-
-                    {/* Morning */}
-                    <td className="py-3.5 px-4">
-                      {morningStaff.length === 0 ? (
-                        <span className="text-[11px] text-slate-300">Uncovered</span>
-                      ) : (
-                        morningStaff.map((m) => (
-                          <span
-                            key={m.id}
-                            className="inline-block bg-blue-50 text-[#245CE2] font-semibold text-[11px] px-2 py-0.5 rounded-md mr-1"
-                          >
-                            {m.employeeName}
-                          </span>
-                        ))
-                      )}
-                    </td>
-
-                    {/* Afternoon */}
-                    <td className="py-3.5 px-4">
-                      {afternoonStaff.length === 0 ? (
-                        <span className="text-[11px] text-slate-300">Uncovered</span>
-                      ) : (
-                        afternoonStaff.map((a) => (
-                          <span
-                            key={a.id}
-                            className="inline-block bg-amber-50 text-amber-700 font-semibold text-[11px] px-2 py-0.5 rounded-md mr-1"
-                          >
-                            {a.employeeName}
-                          </span>
-                        ))
-                      )}
-                    </td>
-
-                    {/* Night */}
-                    <td className="py-3.5 px-4">
-                      {nightStaff.length === 0 ? (
-                        <span className="text-[11px] text-slate-300">Uncovered</span>
-                      ) : (
-                        nightStaff.map((n) => (
-                          <span
-                            key={n.id}
-                            className="inline-block bg-indigo-50 text-indigo-700 font-semibold text-[11px] px-2 py-0.5 rounded-md mr-1"
-                          >
-                            {n.employeeName}
-                          </span>
-                        ))
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+              {loading ? (
+                <tr><td colSpan="6" className="p-8 text-center text-slate-400">Loading schedules…</td></tr>
+              ) : schedules.length === 0 ? (
+                <tr><td colSpan="6" className="p-8 text-center text-slate-400">No employee shifts scheduled.</td></tr>
+              ) : schedules.map((schedule) => (
+                <tr key={schedule.id} className="hover:bg-slate-50/60">
+                  <td className="px-4 py-3 font-mono">{schedule.shiftDate}</td>
+                  <td className="px-4 py-3 font-semibold text-slate-800">{schedule.employeeName} <span className="text-slate-400">({schedule.employeeCode})</span></td>
+                  <td className="px-4 py-3">{schedule.customerName}</td>
+                  <td className="px-4 py-3">{schedule.shiftName} <span className="text-slate-500">{timeValue(schedule.shiftStartTime)}–{timeValue(schedule.shiftEndTime)}</span></td>
+                  <td className="px-4 py-3"><Badge status={schedule.status} /></td>
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    {schedule.status === 'SCHEDULED' && <>
+                      <button onClick={() => openEditSchedule(schedule)} disabled={saving} title="Edit schedule" className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg"><Edit2 className="w-4 h-4" /></button>
+                      <button onClick={() => cancelSchedule(schedule)} disabled={saving} title="Cancel schedule" className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg"><XCircle className="w-4 h-4" /></button>
+                    </>}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
-      {/* Create Shift Modal */}
-      <Modal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        title="Create New Shift Window"
-        subtitle="Establish a new recurring work interval for staff allocations"
-      >
-        <form onSubmit={handleSaveCreate} className="space-y-4 text-xs">
-          <div>
-            <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Shift Title *
+      <Modal isOpen={shiftModal} onClose={() => setShiftModal(false)} title={editingShift ? 'Edit Shift Template' : 'Create Shift Template'} subtitle="Set shift hours and recurring working days.">
+        <form onSubmit={saveShift} className="space-y-4 text-xs">
+          <label className="block font-bold text-slate-700">Shift name *
+            <input required maxLength={100} value={shiftForm.name} onChange={(event) => setShiftForm({ ...shiftForm, name: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 font-normal" />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="font-bold text-slate-700">Start time *
+              <input type="time" required value={shiftForm.startTime} onChange={(event) => {
+                const startTime = event.target.value;
+                setShiftForm({ ...shiftForm, startTime, isOvernight: shiftForm.endTime < startTime });
+              }} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 font-normal" />
             </label>
-            <input
-              type="text"
-              required
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="e.g. Weekend Special Ops"
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#245CE2]"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Start Time *
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.startTime}
-                onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                placeholder="08:00 AM"
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#245CE2]"
-              />
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-                End Time *
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.endTime}
-                onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
-                placeholder="04:00 PM"
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#245CE2]"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Description & Protocol Notes
+            <label className="font-bold text-slate-700">End time *
+              <input type="time" required value={shiftForm.endTime} onChange={(event) => {
+                const endTime = event.target.value;
+                setShiftForm({ ...shiftForm, endTime, isOvernight: endTime < shiftForm.startTime });
+              }} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 font-normal" />
             </label>
-            <textarea
-              rows={2}
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Operational responsibilities during this window..."
-              className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#245CE2]"
-            />
           </div>
-
-          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => setIsCreateModalOpen(false)}
-              className="px-4 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl font-semibold"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2.5 bg-[#245CE2] hover:bg-[#1A45B0] text-white rounded-xl font-bold transition-all shadow-md"
-            >
-              Create Shift
-            </button>
+          <label className="block font-bold text-slate-700">Description
+            <textarea rows={2} value={shiftForm.description || ''} onChange={(event) => setShiftForm({ ...shiftForm, description: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 font-normal" />
+          </label>
+          <fieldset>
+            <legend className="font-bold text-slate-700 mb-2">Working days *</legend>
+            <div className="flex flex-wrap gap-2">
+              {WEEKDAYS.map((day, index) => (
+                <label key={day} className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-2">
+                  <input type="checkbox" checked={shiftForm.workingDays.includes(index)} onChange={() => toggleShiftDay(index)} />
+                  {day}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          {editingShift && <label className="flex items-center gap-2 font-semibold text-slate-700"><input type="checkbox" checked={shiftForm.is_active} onChange={(event) => setShiftForm({ ...shiftForm, is_active: event.target.checked })} /> Active template</label>}
+          <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+            <button type="button" onClick={() => setShiftModal(false)} className="px-4 py-2.5 text-slate-600 rounded-xl">Cancel</button>
+            <button disabled={saving || !shiftForm.workingDays.length} className="px-5 py-2.5 rounded-xl bg-[#245CE2] font-bold text-white disabled:opacity-50">{saving ? 'Saving…' : editingShift ? 'Save Changes' : 'Create Shift'}</button>
           </div>
         </form>
       </Modal>
 
-      {/* Edit Shift Modal */}
-      <Modal
-        isOpen={!!editingShift}
-        onClose={() => setEditingShift(null)}
-        title="Edit Shift Window"
-        subtitle={`Adjust operating parameters for ${editingShift?.name}`}
-      >
-        <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
-          <div>
-            <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Shift Title
-            </label>
-            <input
-              type="text"
-              required
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#245CE2]"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Start Time
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.startTime}
-                onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#245CE2]"
-              />
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-                End Time
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.endTime}
-                onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#245CE2]"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Description
-            </label>
-            <textarea
-              rows={2}
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#245CE2]"
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => setEditingShift(null)}
-              className="px-4 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl font-semibold"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2.5 bg-[#245CE2] hover:bg-[#1A45B0] text-white rounded-xl font-bold transition-all shadow-md"
-            >
-              Update Shift
-            </button>
+      <Modal isOpen={scheduleModal} onClose={() => setScheduleModal(false)} title={editingSchedule ? 'Edit Employee Schedule' : 'Schedule Employee'} subtitle="Assign an employee-customer relationship to a shift and date.">
+        <form onSubmit={saveSchedule} className="space-y-4 text-xs">
+          <label className="block font-bold text-slate-700">Employee and customer assignment *
+            <select required value={scheduleForm.assignmentId} onChange={(event) => setScheduleForm({ ...scheduleForm, assignmentId: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 font-normal">
+              {activeAssignments.map((assignment) => (
+                <option key={assignment.id} value={assignment.id}>{assignment.employeeName} — {assignment.customerName}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block font-bold text-slate-700">Shift template *
+            <select required value={scheduleForm.shiftId} onChange={(event) => setScheduleForm({ ...scheduleForm, shiftId: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 font-normal">
+              {shifts.filter((shift) => shift.is_active).map((shift) => <option key={shift.id} value={shift.id}>{shift.name} ({timeValue(shift.startTime)}–{timeValue(shift.endTime)})</option>)}
+            </select>
+          </label>
+          <label className="block font-bold text-slate-700">Shift date *
+            <input type="date" required value={scheduleForm.shiftDate} onChange={(event) => setScheduleForm({ ...scheduleForm, shiftDate: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 font-normal" />
+          </label>
+          <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+            <button type="button" onClick={() => setScheduleModal(false)} className="px-4 py-2.5 text-slate-600 rounded-xl">Cancel</button>
+            <button disabled={saving || !activeAssignments.length || !shifts.some((shift) => shift.is_active)} className="px-5 py-2.5 rounded-xl bg-[#245CE2] font-bold text-white disabled:opacity-50">{saving ? 'Saving…' : editingSchedule ? 'Save Changes' : 'Schedule'}</button>
           </div>
         </form>
       </Modal>

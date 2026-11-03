@@ -107,7 +107,7 @@ WorkTrack Modular Architecture:
 ## 6. Project Scope Boundaries
 
 ### In-Scope (Implemented & Core Deliverables)
-* Responsive React single-page application with Admin, Employee, and Customer portal screens. Admin employee, customer, and assignment management is API-backed; other operational screens remain demo/local-storage workflows pending later integration phases.
+* Responsive React single-page application with Admin, Employee, and Customer portal screens. Admin employee, customer, assignment, shift-template, and employee-schedule management is API-backed; other operational screens remain demo/local-storage workflows pending later integration phases.
 * Django 5.1 REST API modules with SimpleJWT authentication; frontend integration is being delivered in phases rather than considered complete.
 * PostgreSQL relational schema and migrations across 11 modular apps.
 * Role-based permissions (`IsAdmin`, `IsEmployee`, `IsCustomer`) and scoped employee/customer profile lists.
@@ -120,9 +120,9 @@ WorkTrack Modular Architecture:
 * Backend automated tests covering authentication, attendance, reports, API isolation, surveillance, dashboards, and Phase 1 admin CRUD workflows.
 
 ### Current Integration Status
-Phase 1 is integrated: the Admin employee, customer, and employee-customer assignment pages load and mutate Django API records. User passwords are set through the backend and stored as Django password hashes; deactivating an employee/customer also disables their login. Frontend demo shortcuts require `VITE_ENABLE_DEMO_MODE=true`; by default the login form uses backend authentication only.
+Phases 1 and 2 are integrated: Admin employee/customer/employee-customer assignment and shift template/schedule workflows use Django APIs. Employees can view their own scheduled shifts, and customers can query only schedules assigned to their account. Shift templates include working days and overnight support; the backend rejects invalid dates and overlapping employee schedules. User passwords are set through the backend and stored as Django password hashes; deactivating an employee/customer also disables their login. Frontend demo shortcuts require `VITE_ENABLE_DEMO_MODE=true`; by default the login form uses backend authentication only.
 
-Shift management, attendance, reports, customer operations, and notifications still have frontend screens and backend APIs but are not yet fully wired together. Their UI may display or persist sample state in browser local storage. Do not treat those screens or the simulated CCTV feed as production workflows until the corresponding integration phases are complete.
+Attendance, reports, broader customer operations, and notifications still have frontend screens and backend APIs but are not yet fully wired together. Their UI may display or persist sample state in browser local storage. Do not treat those screens or the simulated CCTV feed as production workflows until the corresponding integration phases are complete.
 
 ### Out-of-Scope (Deferred to Future Iterations)
 * Native mobile apps (iOS / Android) — currently addressed via responsive Web SPA.

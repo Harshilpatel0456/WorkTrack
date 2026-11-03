@@ -60,4 +60,29 @@ export const adminApi = {
     revoke: (id) => apiClient(`/assignments/${id}/revoke/`, { method: 'POST' }),
     remove: (id) => apiClient(`/assignments/${id}/`, { method: 'DELETE' }),
   },
+  shifts: {
+    list: () => listAll('/shifts/templates/'),
+    create: (data) => apiClient('/shifts/templates/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+    update: (id, data) => apiClient(`/shifts/templates/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+    remove: (id) => apiClient(`/shifts/templates/${id}/`, { method: 'DELETE' }),
+  },
+  schedules: {
+    list: () => listAll('/shifts/schedules/'),
+    create: (data) => apiClient('/shifts/schedules/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+    update: (id, data) => apiClient(`/shifts/schedules/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+    cancel: (id) => apiClient(`/shifts/schedules/${id}/cancel/`, { method: 'POST' }),
+    remove: (id) => apiClient(`/shifts/schedules/${id}/`, { method: 'DELETE' }),
+  },
 };

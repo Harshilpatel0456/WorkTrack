@@ -5,6 +5,10 @@ from django.utils.translation import gettext_lazy as _
 from apps.assignments.models import EmployeeCustomerAssignment
 
 
+def all_weekdays():
+    return list(range(7))
+
+
 class Shift(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100)
@@ -12,6 +16,7 @@ class Shift(models.Model):
     end_time = models.TimeField()
     description = models.TextField(blank=True, null=True)
     is_overnight = models.BooleanField(default=False)
+    working_days = models.JSONField(default=all_weekdays)
     is_active = models.BooleanField(default=True, db_index=True)
     color_tag = models.CharField(max_length=10, default='#3B82F6')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -66,6 +71,7 @@ class ShiftAssignment(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=['employee_customer_assignment', 'shift', 'shift_date'],
+                condition=models.Q(status__in=['SCHEDULED', 'IN_PROGRESS']),
                 name='unique_emp_shift_per_date'
             )
         ]

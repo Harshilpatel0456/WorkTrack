@@ -1,7 +1,7 @@
 # 🧪 Automated Testing Strategy & Test Suite: WorkTrack
 
 > **Testing Frameworks:** `pytest 8.3` | `pytest-django 4.14` | DRF `APIClient`  
-> **Test Status:** Run `python -m pytest` for the current result; the suite includes Phase 1 Admin API tests.
+> **Test Status:** Run `python -m pytest` for the current result; the suite includes Phase 1 and Phase 2 API tests.
 > **Execution Location:** `backend/tests/`
 
 ---
@@ -18,6 +18,7 @@ pie title Test Suite Distribution
     "Customer IDOR & RBAC Isolation" : 3
     "Surveillance & Dashboard KPIs" : 5
     "Phase 1 Admin APIs" : 7
+    "Phase 2 Shift APIs" : 12
 ```
 
 ---
@@ -34,7 +35,8 @@ backend/
     ├── test_reports.py           # Report creation, version snapshotting, submission tests
     ├── test_isolation.py         # Customer IDOR isolation, RBAC privilege boundaries
     ├── test_surveillance_and_dashboards.py # Simulated audits, admin KPIs, employee/customer home feeds
-    └── test_admin_phase1.py      # Admin CRUD, status changes, assignments, profile-list scoping
+    ├── test_admin_phase1.py      # Admin CRUD, status changes, assignments, profile-list scoping
+    └── test_shifts_phase2.py     # Shift CRUD, scheduling, overlap validation, and role scoping
 ```
 
 ---
@@ -63,6 +65,7 @@ backend/
 | `test_surveillance_and_dashboards.py` | `test_employee_dashboard` | Guard queries `/dashboard/employee/`; returns active shift & punch status. | **PASSED** |
 | `test_surveillance_and_dashboards.py` | `test_customer_dashboard` | Client queries `/dashboard/customer/`; returns store coverage and reports. | **PASSED** |
 | `test_admin_phase1.py` | Admin CRUD, deactivation, assignment lifecycle, profile scoping | Seven API tests verify password hashing, CRUD/status changes, disabled-account login rejection, assignment validation, and role-scoped lists. | **PASSED** |
+| `test_shifts_phase2.py` | Shift CRUD, working days, overnight schedules, conflicts, and access isolation | Twelve API tests cover template validation/status/delete, schedule create/edit/cancel, overlap checks, and employee/customer permissions. | **PASSED** |
 
 ---
 
@@ -75,7 +78,7 @@ cd backend
 python -m pytest
 ```
 
-The Phase 1 admin integration tests verify employee/customer creation and updates, password hashing, login deactivation/reactivation, assignment create/revoke/reactivate behavior, and employee/customer list scoping. The surveillance tests exercise simulated telemetry only; they do not validate real cameras or AI.
+The Phase 1 admin integration tests verify employee/customer creation and updates, password hashing, login deactivation/reactivation, assignment create/revoke/reactivate behavior, and employee/customer list scoping. Phase 2 tests cover shift template validation, recurring workdays, overnight intervals, schedule conflicts, cancellation, and role-scoped reads. The surveillance tests exercise simulated telemetry only; they do not validate real cameras or AI.
 
 ### Running Specific Suites with Verbosity
 ```powershell

@@ -15,15 +15,15 @@
 | **04** | Authentication & RBAC | Custom User model, email login, SimpleJWT token rotation | `COMPLETED` |
 | **05** | Master Staff & Client Management | Backend CRUD APIs; Admin employee/customer pages integrated with PostgreSQL | `COMPLETED` |
 | **06** | Contract Allocations | Backend assignment APIs; Admin assignment page integrated; shift/date scheduling remains separate | `COMPLETED` |
-| **07** | Shift Templates & Scheduling | Backend shift templates and roster APIs; frontend remains demo/local state | `BACKEND COMPLETE` |
+| **07** | Shift Templates & Scheduling | Admin templates and date-specific employee schedules integrated with scoped API access | `COMPLETED` |
 | **08** | Attendance Engine | Backend sequential punch validation; frontend remains demo/local state | `BACKEND COMPLETE` |
 | **09** | Daily Reporting & Versioning | Backend reports and immutable version snapshots; frontend remains demo/local state | `BACKEND COMPLETE` |
 | **10** | Threaded Feedback & Discussions | Backend comments/replies and isolation; frontend remains demo/local state | `BACKEND COMPLETE` |
 | **11** | Hourly CCTV Surveillance | Backend audit workflow and simulated telemetry; no camera/AI integration | `BACKEND DEMO` |
 | **12** | Multi-Cadence Notifications | Backend notification preferences/tasks; frontend remains demo/local state | `BACKEND COMPLETE` |
 | **13** | Role Analytics Dashboards | Backend dashboard endpoints; frontend dashboards remain demo/local state | `BACKEND COMPLETE` |
-| **14** | Automated Testing & Hardening | pytest coverage for backend rules, access isolation, and Phase 1 Admin APIs | `COMPLETED` |
-| **15** | React Client API Integration | Phase 1 Admin integration complete; Phases 2–6 remain | `IN PROGRESS` |
+| **14** | Automated Testing & Hardening | pytest coverage for backend rules, access isolation, and Phases 1–2 APIs | `COMPLETED` |
+| **15** | React Client API Integration | Admin, employee, and shift scheduling integration complete; Phases 3–6 remain | `IN PROGRESS` |
 | **16** | Production Cloud Deployment | Nginx, Gunicorn, RDS PostgreSQL, Celery daemon setup | `PLANNED` |
 
 ---
@@ -55,8 +55,8 @@ gantt
 * **M1 (Architecture Baseline):** Approved SRS, relational schema, and API contracts.
 * **M2 (Relational Core):** Applied migrations for all 11 apps (`accounts`, `employees`, `customers`, `assignments`, `shifts`, `attendance`, `reports`, `feedback`, `notifications`, `surveillance`, `audit`).
 * **M3 (API Endpoints):** Verified OpenAPI 3.0.3 schema generation via `drf-spectacular`.
-* **M4 (Test Verification):** Backend pytest suite passes, including dedicated tests for Phase 1 admin APIs. Run the current suite for the authoritative count.
+* **M4 (Test Verification):** Backend pytest suite passes, including dedicated tests for Phase 1 and Phase 2 API workflows. Run the current suite for the authoritative count.
 
 ### Next Sprints
-* **M5 (Frontend Client Wiring):** Continue with shift scheduling, attendance, reports, customer operations, and notifications; replace demo local-storage business data with API data phase by phase.
+* **M5 (Frontend Client Wiring):** Continue with attendance, reports, customer operations, and notifications; replace remaining demo local-storage business data with API data phase by phase.
 * **M6 (Cloud Release):** Provision Ubuntu production droplet, configure Nginx SSL, and execute dry-run deployment.

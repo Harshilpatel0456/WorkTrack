@@ -1,7 +1,7 @@
 # 🗺️ API Endpoint Mapping: Frontend-to-Backend Matrix
 
 > **Purpose:** Traceability matrix correlating React.js components, user interactions, and UI actions to backend Django REST Framework endpoints.
-> **Integration status:** Phase 1 Admin employee, customer, and assignment workflows are connected to these APIs. Later workflow sections document available backend endpoints; they are not yet fully integrated into their frontend pages.
+> **Integration status:** Phase 1 Admin employee/customer/assignment workflows and Phase 2 shift templates/schedules are connected to these APIs. Later workflow sections document available backend endpoints that are not yet fully integrated into their frontend pages.
 
 ---
 
@@ -38,9 +38,14 @@
 | `src/pages/admin/EmployeeAssignments.jsx` | Creates assignment | `POST` | `/api/v1/assignments/` | `ADMIN` | `{employeeId, customerId, notes, status}` | Created assignment | Requires active employee/customer; rejects duplicate active assignment |
 | `src/pages/admin/EmployeeAssignments.jsx` | Revokes/reactivates assignment | `POST` | `/api/v1/assignments/{id}/revoke/` or `/approve/` | `ADMIN` | Empty body | `{id, status}` | Re-activation rechecks active profiles and duplicate assignments |
 | `src/services/adminApi.js` | Deletes assignment record | `DELETE` | `/api/v1/assignments/{id}/` | `ADMIN` | Path `id` | HTTP 204 | Removes the assignment record |
-| `src/pages/admin/AdminShifts.jsx` | Reads shift templates | `GET` | `/api/v1/shifts/templates/` | Auth | None | `[Shift]` | Read-only for non-admins |
-| `src/pages/admin/AdminShifts.jsx` | Creates shift template | `POST` | `/api/v1/shifts/templates/` | `ADMIN` | `{name, start_time, end_time, is_overnight, color_tag}` | Created `Shift` | Validates time ranges |
-| `src/pages/admin/AdminShifts.jsx` | Schedules shift | `POST` | `/api/v1/shifts/schedules/` | `ADMIN` | `{assignmentId, shiftId, shiftDate}` | Created `ShiftAssignment` | Assignment must be ACTIVE |
+| `src/pages/admin/ShiftManagement.jsx` | Lists shift templates | `GET` | `/api/v1/shifts/templates/` | Auth | Paginated list | Shift templates | Admin may manage; reads are authenticated |
+| `src/pages/admin/ShiftManagement.jsx` | Creates/edits a shift template | `POST` / `PATCH` | `/api/v1/shifts/templates/` or `/{id}/` | `ADMIN` | `{name, startTime, endTime, description, isOvernight, workingDays, is_active}` | Shift template | Nonzero duration, overnight/time consistency, unique weekday list |
+| `src/pages/admin/ShiftManagement.jsx` | Activates/deactivates a shift template | `PATCH` | `/api/v1/shifts/templates/{id}/` | `ADMIN` | `{"is_active": true|false}` | Updated shift template | Inactive templates cannot receive new schedules |
+| `src/pages/admin/ShiftManagement.jsx` | Deletes a shift template | `DELETE` | `/api/v1/shifts/templates/{id}/` | `ADMIN` | Path `id` | HTTP 204 | Refused when any schedule references it; deactivate instead |
+| `src/pages/admin/ShiftManagement.jsx` | Creates/edits employee schedule | `POST` / `PATCH` | `/api/v1/shifts/schedules/` or `/{id}/` | `ADMIN` | `{assignmentId, shiftId, shiftDate}` | Shift schedule | Requires active relation/template, valid working day, no employee overlap |
+| `src/pages/admin/ShiftManagement.jsx` | Cancels/removes scheduled shift | `POST` / `DELETE` | `/api/v1/shifts/schedules/{id}/cancel/` or `/{id}/` | `ADMIN` | Path `id` | `{id, status}` / HTTP 204 | Scheduled record becomes `CANCELLED`; begun/completed shifts cannot be removed |
+| `src/pages/employee/MyShifts.jsx` | Reads personal shifts | `GET` | `/api/v1/shifts/schedules/` | `EMPLOYEE` | Authenticated user | Paginated shift schedules | Scoped to the logged-in employee |
+| Customer portal | Reads assigned shift schedules | `GET` | `/api/v1/shifts/schedules/` | `CUSTOMER` | Authenticated user | Paginated shift schedules | Scoped to the logged-in customer |
 
 ---
 
