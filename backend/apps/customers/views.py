@@ -15,6 +15,16 @@ class CustomerViewSet(viewsets.ModelViewSet):
     filterset_fields = ['account_status', 'industry']
     ordering_fields = ['company_name', 'customer_code', 'created_at']
 
+    def get_queryset(self):
+        user = self.request.user
+        if not user.is_authenticated:
+            return CustomerProfile.objects.none()
+        if user.role == 'ADMIN' or user.is_staff or user.is_superuser:
+            return self.queryset
+        if user.role == 'CUSTOMER' and hasattr(user, 'customer_profile'):
+            return self.queryset.filter(pk=user.customer_profile.pk)
+        return CustomerProfile.objects.none()
+
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
     def me(self, request):
         if not hasattr(request.user, 'customer_profile'):
@@ -25,9 +35,23 @@ class CustomerViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], permission_classes=[IsAdmin])
     def toggle_status(self, request, pk=None):
         customer = self.get_object()
-        customer.account_status = CustomerProfile.AccountStatus.SUSPENDED if customer.account_status == CustomerProfile.AccountStatus.ACTIVE else CustomerProfile.AccountStatus.ACTIVE
+        customer.account_status = (
+            CustomerProfile.AccountStatus.SUSPENDED
+            if customer.account_status != CustomerProfile.AccountStatus.SUSPENDED
+            else CustomerProfile.AccountStatus.ACTIVE
+        )
         customer.save()
+        customer.user.is_active = customer.account_status != CustomerProfile.AccountStatus.SUSPENDED
+        customer.user.save(update_fields=['is_active'])
         return Response({'id': str(customer.id), 'accountStatus': customer.account_status})
+
+    def destroy(self, request, *args, **kwargs):
+        customer = self.get_object()
+        customer.account_status = CustomerProfile.AccountStatus.SUSPENDED
+        customer.save(update_fields=['account_status', 'updated_at'])
+        customer.user.is_active = False
+        customer.user.save(update_fields=['is_active'])
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
     def my_employees(self, request):

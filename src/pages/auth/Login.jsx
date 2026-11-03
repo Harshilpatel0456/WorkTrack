@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { DEMO_MODE } from '../../services/demoMode';
 import { Shield, User, Building2, ArrowRight, Lock, Mail, Sparkles, CheckCircle2, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 export const Login = () => {
-  const [email, setEmail] = useState('admin@worktrack.demo');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState(DEMO_MODE ? 'admin@worktrack.demo' : '');
+  const [password, setPassword] = useState(DEMO_MODE ? 'admin123' : '');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [selectedPreset, setSelectedPreset] = useState('admin');
@@ -63,8 +64,8 @@ export const Login = () => {
       </div>
 
       <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column: Preset Cards */}
-        <div className="lg:col-span-5 space-y-4">
+        {/* Demo credentials are shown only when demo mode is explicitly enabled. */}
+        {DEMO_MODE && <div className="lg:col-span-5 space-y-4">
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-card">
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
               One-Click Evaluator Personas
@@ -176,15 +177,15 @@ export const Login = () => {
               <span>Full JWT & LocalStorage dual mode enabled</span>
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* Right Column: Sign In Form */}
-        <div className="lg:col-span-7">
+        <div className={DEMO_MODE ? 'lg:col-span-7' : 'lg:col-span-12'}>
           <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-card">
             <div className="mb-6">
               <h2 className="text-xl font-bold text-slate-900">Sign in to your account</h2>
               <p className="text-xs text-slate-500 mt-1">
-                Enter your credentials or use the presets on the left.
+                {DEMO_MODE ? 'Enter your credentials or use the demo presets.' : 'Enter your account credentials.'}
               </p>
             </div>
 
@@ -245,12 +246,8 @@ export const Login = () => {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between text-xs pt-1">
-                <label className="flex items-center gap-2 cursor-pointer text-slate-600">
-                  <input type="checkbox" defaultChecked className="rounded text-[#245CE2] focus:ring-[#245CE2]" />
-                  <span>Remember demo session</span>
-                </label>
-                <span className="text-[#245CE2] font-semibold">Dual JWT / Demo Active</span>
+              <div className="flex items-center justify-end text-xs pt-1">
+                <span className="text-[#245CE2] font-semibold">JWT authentication</span>
               </div>
 
               <button

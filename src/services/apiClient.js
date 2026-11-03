@@ -62,6 +62,9 @@ export async function apiClient(endpoint, options = {}) {
             const errData = await retryRes.json().catch(() => ({}));
             throw new Error(errData.detail || errData.message || `Request failed with status ${retryRes.status}`);
           }
+          if (retryRes.status === 204) {
+            return null;
+          }
           return retryRes.json();
         } else {
           // Refresh token expired or revoked
@@ -168,4 +171,3 @@ export const authApi = {
     });
   },
 };
-

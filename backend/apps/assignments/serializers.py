@@ -37,7 +37,36 @@ class EmployeeCustomerAssignmentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'assignedByName', 'created_at', 'updated_at']
 
+    def validate(self, attrs):
+        employee = attrs.get('employee', getattr(self.instance, 'employee', None))
+        customer = attrs.get('customer', getattr(self.instance, 'customer', None))
+        status_value = attrs.get(
+            'status',
+            getattr(self.instance, 'status', EmployeeCustomerAssignment.Status.ACTIVE),
+        )
+
+        if status_value == EmployeeCustomerAssignment.Status.ACTIVE:
+            if employee and (
+                employee.status != EmployeeProfile.Status.ACTIVE or not employee.user.is_active
+            ):
+                raise serializers.ValidationError({'employeeId': 'Only active employees can be assigned.'})
+            if customer and (
+                customer.account_status == CustomerProfile.AccountStatus.SUSPENDED or not customer.user.is_active
+            ):
+                raise serializers.ValidationError({'customerId': 'Suspended customers cannot receive assignments.'})
+
+            duplicates = EmployeeCustomerAssignment.objects.filter(
+                employee=employee,
+                customer=customer,
+                status=EmployeeCustomerAssignment.Status.ACTIVE,
+            )
+            if self.instance:
+                duplicates = duplicates.exclude(pk=self.instance.pk)
+            if employee and customer and duplicates.exists():
+                raise serializers.ValidationError('This employee is already actively assigned to this customer.')
+
+        return attrs
+
     def create(self, validated_data):
         validated_data['assigned_by'] = self.context['request'].user
         return super().create(validated_data)
-

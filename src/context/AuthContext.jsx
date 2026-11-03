@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { storageService } from '../services/storageService';
 import { authApi, tokenStorage } from '../services/apiClient';
+import { DEMO_MODE } from '../services/demoMode';
 
 const AuthContext = createContext();
 
@@ -9,7 +10,7 @@ export const AuthProvider = ({ children }) => {
 
   // Initialize authentication state: try to restore from storage, otherwise start unauthenticated
   const [authState, setAuthState] = useState(() => {
-    const saved = storageService.getAuthState();
+    const saved = DEMO_MODE ? storageService.getAuthState() : null;
     if (saved) return saved;
     // Default unauthenticated state (no demo user)
     return {
@@ -22,7 +23,7 @@ export const AuthProvider = ({ children }) => {
   });
 
   useEffect(() => {
-    storageService.saveAuthState(authState);
+    if (DEMO_MODE) storageService.saveAuthState(authState);
   }, [authState]);
 
   // Silently hydrate user from backend if JWT access token exists
@@ -111,8 +112,8 @@ export const AuthProvider = ({ children }) => {
         return { success: false, message: apiError.message || 'Invalid email or password.' };
       }
 
-      // If backend is offline or network error, verify if it matches demo credentials fallback
-      if (cleanEmail === 'admin@worktrack.demo' && password === 'admin123') {
+      // Offline credential shortcuts are available only in explicitly enabled demo builds.
+      if (DEMO_MODE && cleanEmail === 'admin@worktrack.demo' && password === 'admin123') {
         const state = {
           isAuthenticated: true,
           role: 'admin',
@@ -131,7 +132,7 @@ export const AuthProvider = ({ children }) => {
         return { success: true, role: 'admin' };
       }
 
-      if (cleanEmail === 'employee@worktrack.demo' && password === 'employee123') {
+      if (DEMO_MODE && cleanEmail === 'employee@worktrack.demo' && password === 'employee123') {
         const state = {
           isAuthenticated: true,
           role: 'employee',
@@ -150,7 +151,7 @@ export const AuthProvider = ({ children }) => {
         return { success: true, role: 'employee' };
       }
 
-      if (cleanEmail === 'customer@worktrack.demo' && password === 'customer123') {
+      if (DEMO_MODE && cleanEmail === 'customer@worktrack.demo' && password === 'customer123') {
         const state = {
           isAuthenticated: true,
           role: 'customer',
@@ -218,6 +219,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const quickLoginAs = (role, targetId) => {
+    if (!DEMO_MODE) return;
     if (role === 'admin') {
       setAuthState({
         isAuthenticated: true,

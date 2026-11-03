@@ -14,6 +14,16 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     filterset_fields = ['status', 'department']
     ordering_fields = ['employee_code', 'user__first_name', 'joining_date']
 
+    def get_queryset(self):
+        user = self.request.user
+        if not user.is_authenticated:
+            return EmployeeProfile.objects.none()
+        if user.role == 'ADMIN' or user.is_staff or user.is_superuser:
+            return self.queryset
+        if user.role == 'EMPLOYEE' and hasattr(user, 'employee_profile'):
+            return self.queryset.filter(pk=user.employee_profile.pk)
+        return EmployeeProfile.objects.none()
+
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
     def me(self, request):
         if not hasattr(request.user, 'employee_profile'):
@@ -24,6 +34,20 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], permission_classes=[IsAdmin])
     def toggle_status(self, request, pk=None):
         employee = self.get_object()
-        employee.status = EmployeeProfile.Status.INACTIVE if employee.status == EmployeeProfile.Status.ACTIVE else EmployeeProfile.Status.ACTIVE
+        employee.status = (
+            EmployeeProfile.Status.INACTIVE
+            if employee.status == EmployeeProfile.Status.ACTIVE
+            else EmployeeProfile.Status.ACTIVE
+        )
         employee.save()
+        employee.user.is_active = employee.status == EmployeeProfile.Status.ACTIVE
+        employee.user.save(update_fields=['is_active'])
         return Response({'id': str(employee.id), 'status': employee.status})
+
+    def destroy(self, request, *args, **kwargs):
+        employee = self.get_object()
+        employee.status = EmployeeProfile.Status.INACTIVE
+        employee.save(update_fields=['status', 'updated_at'])
+        employee.user.is_active = False
+        employee.user.save(update_fields=['is_active'])
+        return Response(status=status.HTTP_204_NO_CONTENT)

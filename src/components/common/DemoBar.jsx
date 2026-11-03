@@ -3,11 +3,20 @@ import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import { Shield, User, Building2, RotateCcw, ChevronDown, Check } from 'lucide-react';
+import { DEMO_MODE } from '../../services/demoMode';
 
 export const DemoBar = () => {
   const { role, quickLoginAs, switchPersona, selectedEmployeeId, selectedCustomerId } = useAuth();
   const { employees, customers, resetDemoData } = useApp();
   const navigate = useNavigate();
+
+  if (!DEMO_MODE) {
+    return (
+      <div className="bg-amber-50 text-amber-900 px-6 py-2 border-b border-amber-200 text-xs">
+        Live account authentication is enabled. Business pages not yet API-integrated may still show sample data.
+      </div>
+    );
+  }
 
   const handleRoleChange = (targetRole) => {
     quickLoginAs(targetRole);

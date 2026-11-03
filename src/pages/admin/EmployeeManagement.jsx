@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useApp } from '../../context/AppContext';
+import React, { useCallback, useEffect, useState } from 'react';
+import { adminApi } from '../../services/adminApi';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import {
@@ -19,7 +19,49 @@ import {
 } from 'lucide-react';
 
 export const EmployeeManagement = () => {
-  const { employees, customers, addEmployee, updateEmployee, toggleEmployeeStatus } = useApp();
+  const [employees, setEmployees] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [employeeRecords, customerRecords, assignmentRecords] = await Promise.all([
+        adminApi.employees.list(),
+        adminApi.customers.list(),
+        adminApi.assignments.list(),
+      ]);
+      setCustomers(customerRecords.map((customer) => ({
+        ...customer,
+        companyName: customer.companyName,
+      })));
+      setAssignments(assignmentRecords);
+      setEmployees(employeeRecords.map((employee) => ({
+        ...employee,
+        name: employee.fullName || [employee.firstName, employee.lastName].filter(Boolean).join(' '),
+        status: employee.status === 'ON_LEAVE'
+          ? 'On Leave'
+          : employee.status === 'INACTIVE' ? 'Inactive' : 'Active',
+        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+        assignedCustomerIds: assignmentRecords
+          .filter((assignment) => assignment.employeeId === employee.id && assignment.status === 'ACTIVE')
+          .map((assignment) => assignment.customerId),
+      })));
+    } catch (loadError) {
+      setError(loadError.message || 'Unable to load employee management data.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -40,6 +82,7 @@ export const EmployeeManagement = () => {
     roleTitle: '',
     department: 'Operations',
     status: 'Active',
+    password: '',
   });
 
   const handleOpenAdd = () => {
@@ -52,6 +95,7 @@ export const EmployeeManagement = () => {
       roleTitle: 'Field Specialist',
       department: 'Operations',
       status: 'Active',
+      password: '',
     });
     setIsAddModalOpen(true);
   };
@@ -62,25 +106,84 @@ export const EmployeeManagement = () => {
       name: emp.name,
       employeeId: emp.employeeId,
       email: emp.email,
-      phone: emp.phone,
+      phone: emp.phone || '',
       joiningDate: emp.joiningDate,
       roleTitle: emp.roleTitle,
       department: emp.department,
       status: emp.status,
+      address: emp.address || '',
     });
   };
 
-  const handleSaveAdd = (e) => {
+  const handleSaveAdd = async (e) => {
     e.preventDefault();
-    addEmployee(formData);
-    setIsAddModalOpen(false);
+    const [firstName, ...lastName] = formData.name.trim().split(/\s+/);
+    setSaving(true);
+    setError('');
+    try {
+      await adminApi.employees.create({
+        employeeId: formData.employeeId.trim(),
+        email: formData.email.trim().toLowerCase(),
+        firstName,
+        lastName: lastName.join(' '),
+        password: formData.password,
+        phone: formData.phone,
+        roleTitle: formData.roleTitle,
+        department: formData.department,
+        joiningDate: formData.joiningDate,
+        status: formData.status.toUpperCase().replace(' ', '_'),
+      });
+      setIsAddModalOpen(false);
+      setNotice('Employee account created.');
+      await loadData();
+    } catch (saveError) {
+      setError(saveError.message || 'Unable to create employee.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleSaveEdit = (e) => {
+  const handleSaveEdit = async (e) => {
     e.preventDefault();
     if (!editingEmployee) return;
-    updateEmployee(editingEmployee.id, formData);
-    setEditingEmployee(null);
+    const [firstName, ...lastName] = formData.name.trim().split(/\s+/);
+    setSaving(true);
+    setError('');
+    try {
+      await adminApi.employees.update(editingEmployee.id, {
+        employeeId: formData.employeeId.trim(),
+        email: formData.email.trim().toLowerCase(),
+        firstName,
+        lastName: lastName.join(' '),
+        phone: formData.phone,
+        roleTitle: formData.roleTitle,
+        department: formData.department,
+        joiningDate: formData.joiningDate,
+        status: formData.status.toUpperCase().replace(' ', '_'),
+        address: formData.address,
+      });
+      setEditingEmployee(null);
+      setNotice('Employee information updated.');
+      await loadData();
+    } catch (saveError) {
+      setError(saveError.message || 'Unable to update employee.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleStatus = async (employee) => {
+    setSaving(true);
+    setError('');
+    try {
+      await adminApi.employees.toggleStatus(employee.id);
+      setNotice(`Employee ${employee.status === 'Active' ? 'deactivated' : 'activated'}.`);
+      await loadData();
+    } catch (saveError) {
+      setError(saveError.message || 'Unable to change employee status.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Filtering
@@ -89,7 +192,7 @@ export const EmployeeManagement = () => {
       emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       emp.employeeId.toLowerCase().includes(searchQuery.toLowerCase()) ||
       emp.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      emp.phone.toLowerCase().includes(searchQuery.toLowerCase());
+      (emp.phone || '').toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesStatus = statusFilter === 'All' || emp.status === statusFilter;
     const matchesCustomer =
@@ -100,6 +203,8 @@ export const EmployeeManagement = () => {
 
   return (
     <div className="space-y-6">
+      {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div>}
+      {notice && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700">{notice}</div>}
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -148,6 +253,7 @@ export const EmployeeManagement = () => {
               <option value="All">All Statuses</option>
               <option value="Active">Active Only</option>
               <option value="Inactive">Inactive Only</option>
+              <option value="On Leave">On Leave</option>
             </select>
           </div>
 
@@ -185,7 +291,9 @@ export const EmployeeManagement = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-              {filteredEmployees.length === 0 ? (
+              {loading ? (
+                <tr><td colSpan="7" className="py-8 text-center text-slate-400">Loading employees…</td></tr>
+              ) : filteredEmployees.length === 0 ? (
                 <tr>
                   <td colSpan="7" className="py-8 text-center text-slate-400">
                     No employees matching the search filters.
@@ -284,7 +392,8 @@ export const EmployeeManagement = () => {
 
                           {/* Activate / Deactivate Toggle */}
                           <button
-                            onClick={() => toggleEmployeeStatus(emp.id)}
+                            onClick={() => handleToggleStatus(emp)}
+                            disabled={saving}
                             className={`p-1.5 rounded-lg transition-colors ${
                               emp.status === 'Active'
                                 ? 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'
@@ -352,6 +461,21 @@ export const EmployeeManagement = () => {
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="name@worktrack.demo"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#245CE2]"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Initial Password *
+              </label>
+              <input
+                type="password"
+                required
+                minLength={8}
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                autoComplete="new-password"
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#245CE2]"
               />
             </div>
@@ -499,6 +623,7 @@ export const EmployeeManagement = () => {
               >
                 <option value="Active">Active</option>
                 <option value="Inactive">Inactive</option>
+                <option value="On Leave">On Leave</option>
               </select>
             </div>
           </div>

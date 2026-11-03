@@ -1,7 +1,7 @@
 # 🧪 Automated Testing Strategy & Test Suite: WorkTrack
 
 > **Testing Frameworks:** `pytest 8.3` | `pytest-django 4.14` | DRF `APIClient`  
-> **Test Status:** 19 Passed (100% Pass Rate across Unit & Integration Suites)  
+> **Test Status:** Run `python -m pytest` for the current result; the suite includes Phase 1 Admin API tests.
 > **Execution Location:** `backend/tests/`
 
 ---
@@ -12,11 +12,12 @@ WorkTrack's testing architecture emphasizes automated verification of high-risk 
 
 ```mermaid
 pie title Test Suite Distribution
-    "Authentication & JWT Security" : 21
-    "Attendance & Punch Clock Rules" : 21
-    "Daily Reports & Version Snapshots" : 26
-    "Customer IDOR & RBAC Isolation" : 16
-    "Surveillance & Dashboard KPIs" : 16
+    "Authentication & JWT Security" : 19
+    "Attendance & Punch Clock Rules" : 4
+    "Daily Reports & Version Snapshots" : 3
+    "Customer IDOR & RBAC Isolation" : 3
+    "Surveillance & Dashboard KPIs" : 5
+    "Phase 1 Admin APIs" : 7
 ```
 
 ---
@@ -32,7 +33,8 @@ backend/
     ├── test_attendance.py        # Punch-in, duplicate prevention, punch-out duration tests
     ├── test_reports.py           # Report creation, version snapshotting, submission tests
     ├── test_isolation.py         # Customer IDOR isolation, RBAC privilege boundaries
-    └── test_surveillance_and_dashboards.py # 10-camera audits, admin KPIs, employee/customer home feeds
+    ├── test_surveillance_and_dashboards.py # Simulated audits, admin KPIs, employee/customer home feeds
+    └── test_admin_phase1.py      # Admin CRUD, status changes, assignments, profile-list scoping
 ```
 
 ---
@@ -43,7 +45,7 @@ backend/
 | :--- | :--- | :--- | :---: |
 | `test_auth.py` | `test_login_success` | Valid email & password returns 200 OK, JWT access & refresh tokens, user metadata. | **PASSED** |
 | `test_auth.py` | `test_login_invalid_password` | Incorrect password returns HTTP 401 Unauthorized. | **PASSED** |
-| `test_auth.py` | `test_current_user_me` | Authenticated Bearer request returns correct email and `EMPLOYEE` role. | **PASSED** |
+| `test_auth.py` | `test_current_user_me` | Authenticated request returns correct email and `EMPLOYEE` role. | **PASSED** |
 | `test_auth.py` | `test_unauthenticated_me` | Request without token returns HTTP 401 Unauthorized. | **PASSED** |
 | `test_attendance.py`| `test_check_in_success` | Assigned guard punches in; status is `PRESENT`; shift becomes `IN_PROGRESS`. | **PASSED** |
 | `test_attendance.py`| `test_duplicate_check_in_prevented` | Second check-in attempt on same shift is rejected with HTTP 400 Bad Request. | **PASSED** |
@@ -60,6 +62,7 @@ backend/
 | `test_surveillance_and_dashboards.py` | `test_admin_dashboard_metrics`| Admin queries `/dashboard/admin/`; returns aggregated KPIs and weekly trends. | **PASSED** |
 | `test_surveillance_and_dashboards.py` | `test_employee_dashboard` | Guard queries `/dashboard/employee/`; returns active shift & punch status. | **PASSED** |
 | `test_surveillance_and_dashboards.py` | `test_customer_dashboard` | Client queries `/dashboard/customer/`; returns store coverage and reports. | **PASSED** |
+| `test_admin_phase1.py` | Admin CRUD, deactivation, assignment lifecycle, profile scoping | Seven API tests verify password hashing, CRUD/status changes, disabled-account login rejection, assignment validation, and role-scoped lists. | **PASSED** |
 
 ---
 
@@ -72,6 +75,8 @@ cd backend
 python -m pytest
 ```
 
+The Phase 1 admin integration tests verify employee/customer creation and updates, password hashing, login deactivation/reactivation, assignment create/revoke/reactivate behavior, and employee/customer list scoping. The surveillance tests exercise simulated telemetry only; they do not validate real cameras or AI.
+
 ### Running Specific Suites with Verbosity
 ```powershell
 # Run only IDOR isolation tests
@@ -83,4 +88,3 @@ python -m pytest tests/test_attendance.py -v
 # Run with test coverage report
 python -m pytest --cov=apps tests/
 ```
-

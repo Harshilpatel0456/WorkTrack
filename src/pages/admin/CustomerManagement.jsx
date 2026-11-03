@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useApp } from '../../context/AppContext';
+import React, { useCallback, useEffect, useState } from 'react';
+import { adminApi } from '../../services/adminApi';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import {
@@ -18,7 +18,43 @@ import {
 } from 'lucide-react';
 
 export const CustomerManagement = () => {
-  const { customers, employees, assignments, addCustomer, updateCustomer, toggleCustomerStatus } = useApp();
+  const [customers, setCustomers] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [customerRecords, assignmentRecords] = await Promise.all([
+        adminApi.customers.list(),
+        adminApi.assignments.list(),
+      ]);
+      setCustomers(customerRecords.map((customer) => ({
+        ...customer,
+        accountStatus: customer.accountStatus === 'SUSPENDED'
+          ? 'Suspended'
+          : customer.accountStatus === 'TRIAL' ? 'Trial' : 'Active',
+        color: customer.brandColor,
+        logoLetter: customer.companyName?.charAt(0)?.toUpperCase() || 'C',
+      })));
+      setAssignments(assignmentRecords.map((assignment) => ({
+        ...assignment,
+        status: assignment.status === 'ACTIVE' ? 'Approved' : assignment.status,
+      })));
+    } catch (loadError) {
+      setError(loadError.message || 'Unable to load customer management data.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -34,6 +70,7 @@ export const CustomerManagement = () => {
     address: '',
     accountStatus: 'Active',
     notes: '',
+    password: '',
   });
 
   const handleOpenAdd = () => {
@@ -46,6 +83,7 @@ export const CustomerManagement = () => {
       address: '',
       accountStatus: 'Active',
       notes: '',
+      password: '',
     });
     setIsAddModalOpen(true);
   };
@@ -57,36 +95,91 @@ export const CustomerManagement = () => {
       industry: cust.industry || 'Enterprise Services',
       contactPerson: cust.contactPerson,
       email: cust.email,
-      phone: cust.phone,
-      address: cust.address,
+      phone: cust.phone || '',
+      address: cust.address || '',
       accountStatus: cust.accountStatus,
       notes: cust.notes || '',
     });
   };
 
-  const handleSaveAdd = (e) => {
+  const handleSaveAdd = async (e) => {
     e.preventDefault();
-    addCustomer(formData);
-    setIsAddModalOpen(false);
+    setSaving(true);
+    setError('');
+    try {
+      await adminApi.customers.create({
+        companyName: formData.companyName.trim(),
+        industry: formData.industry,
+        contactPerson: formData.contactPerson.trim(),
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password,
+        phone: formData.phone,
+        address: formData.address,
+        accountStatus: 'ACTIVE',
+      });
+      setIsAddModalOpen(false);
+      setNotice('Customer account created.');
+      await loadData();
+    } catch (saveError) {
+      setError(saveError.message || 'Unable to create customer.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleSaveEdit = (e) => {
+  const handleSaveEdit = async (e) => {
     e.preventDefault();
     if (!editingCustomer) return;
-    updateCustomer(editingCustomer.id, formData);
-    setEditingCustomer(null);
+    setSaving(true);
+    setError('');
+    try {
+      await adminApi.customers.update(editingCustomer.id, {
+        companyName: formData.companyName.trim(),
+        industry: formData.industry,
+        contactPerson: formData.contactPerson.trim(),
+        email: formData.email.trim().toLowerCase(),
+        phone: formData.phone,
+        address: formData.address,
+        timezone: editingCustomer.timezone,
+        brandColor: editingCustomer.brandColor,
+        accountStatus: editingCustomer.accountStatus.toUpperCase(),
+      });
+      setEditingCustomer(null);
+      setNotice('Customer profile updated.');
+      await loadData();
+    } catch (saveError) {
+      setError(saveError.message || 'Unable to update customer.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleStatus = async (customer) => {
+    setSaving(true);
+    setError('');
+    try {
+      await adminApi.customers.toggleStatus(customer.id);
+      setNotice(`Customer account ${customer.accountStatus === 'Active' ? 'suspended' : 'activated'}.`);
+      await loadData();
+    } catch (saveError) {
+      setError(saveError.message || 'Unable to change customer status.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const filteredCustomers = customers.filter((cust) => {
     return (
-      cust.companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      cust.contactPerson.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      cust.email.toLowerCase().includes(searchQuery.toLowerCase())
+      (cust.companyName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (cust.contactPerson || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (cust.email || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
   });
 
   return (
     <div className="space-y-6">
+      {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div>}
+      {notice && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700">{notice}</div>}
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -95,7 +188,7 @@ export const CustomerManagement = () => {
             Client Accounts & Corporate Customers
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Manage client profiles, contacts, deployed workforce quotas, and reporting visibility.
+            Manage customer accounts, contacts, and employee allocations.
           </p>
         </div>
 
@@ -127,7 +220,11 @@ export const CustomerManagement = () => {
 
       {/* Customer Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {filteredCustomers.map((cust) => {
+        {loading ? (
+          <div className="md:col-span-2 rounded-xl border border-slate-200 bg-white p-8 text-center text-xs text-slate-400">Loading customers…</div>
+        ) : filteredCustomers.length === 0 ? (
+          <div className="md:col-span-2 rounded-xl border border-slate-200 bg-white p-8 text-center text-xs text-slate-400">No customer accounts found.</div>
+        ) : filteredCustomers.map((cust) => {
           // Count active allocations for this customer
           const customerAssignments = assignments.filter(
             (a) => a.customerId === cust.id && a.status === 'Approved'
@@ -193,7 +290,7 @@ export const CustomerManagement = () => {
                 <div className="flex items-center gap-2">
                   <span className="bg-blue-50 text-[#245CE2] font-bold px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1">
                     <Users className="w-3.5 h-3.5" />
-                    {customerAssignments.length} Staff Deployed
+                    {customerAssignments.length} Assigned Staff
                   </span>
                 </div>
 
@@ -213,13 +310,14 @@ export const CustomerManagement = () => {
                     <Edit2 className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => toggleCustomerStatus(cust.id)}
+                    onClick={() => handleToggleStatus(cust)}
+                    disabled={saving}
                     className={`p-1.5 rounded-lg transition-colors ${
                       cust.accountStatus === 'Active'
                         ? 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'
                         : 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50'
                     }`}
-                    title={cust.accountStatus === 'Active' ? 'Suspend Account' : 'Activate Account'}
+                    title={cust.accountStatus !== 'Suspended' ? 'Suspend Account' : 'Activate Account'}
                   >
                     <Power className="w-4 h-4" />
                   </button>
@@ -290,6 +388,21 @@ export const CustomerManagement = () => {
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="client@company.com"
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#245CE2]"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Initial Password *
+              </label>
+              <input
+                type="password"
+                required
+                minLength={8}
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                autoComplete="new-password"
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#245CE2]"
               />
             </div>
@@ -477,7 +590,7 @@ export const CustomerManagement = () => {
                     >
                       <div>
                         <span className="font-bold text-slate-900 block">{asg.employeeName}</span>
-                        <span className="text-slate-500 text-[11px]">{asg.shiftName}</span>
+                        <span className="text-slate-500 text-[11px]">{asg.employeeCode}</span>
                       </div>
                       <Badge status="Active Allocation" variant="success" />
                     </div>

@@ -107,17 +107,22 @@ WorkTrack Modular Architecture:
 ## 6. Project Scope Boundaries
 
 ### In-Scope (Implemented & Core Deliverables)
-* 28 fully implemented responsive React frontend pages covering Admin, Employee, and Customer dashboards.
-* Complete Django 5.x REST API backend with SimpleJWT authentication.
+* Responsive React single-page application with Admin, Employee, and Customer portal screens. Admin employee, customer, and assignment management is API-backed; other operational screens remain demo/local-storage workflows pending later integration phases.
+* Django 5.1 REST API modules with SimpleJWT authentication; frontend integration is being delivered in phases rather than considered complete.
 * PostgreSQL relational schema and migrations across 11 modular apps.
-* Strict role-based permissions (`IsAdmin`, `IsEmployee`, `IsCustomer`).
+* Role-based permissions (`IsAdmin`, `IsEmployee`, `IsCustomer`) and scoped employee/customer profile lists.
 * Full attendance lifecycle validation and error handling.
 * Complete report versioning system preserving full JSON snapshots.
 * Threaded comment discussions on reports.
-* Hourly CCTV surveillance batch verification for 10 store cameras.
+* Hourly CCTV audit workflow using seeded/simulated camera telemetry; this is not connected to physical cameras or a computer-vision engine.
 * Notification preference management (Instant, Hourly, 6-Hour, Daily).
 * OpenAPI 3.0 / Swagger interactive documentation via `drf-spectacular`.
-* Automated test suite covering auth, attendance, reports, and IDOR isolation.
+* Backend automated tests covering authentication, attendance, reports, API isolation, surveillance, dashboards, and Phase 1 admin CRUD workflows.
+
+### Current Integration Status
+Phase 1 is integrated: the Admin employee, customer, and employee-customer assignment pages load and mutate Django API records. User passwords are set through the backend and stored as Django password hashes; deactivating an employee/customer also disables their login. Frontend demo shortcuts require `VITE_ENABLE_DEMO_MODE=true`; by default the login form uses backend authentication only.
+
+Shift management, attendance, reports, customer operations, and notifications still have frontend screens and backend APIs but are not yet fully wired together. Their UI may display or persist sample state in browser local storage. Do not treat those screens or the simulated CCTV feed as production workflows until the corresponding integration phases are complete.
 
 ### Out-of-Scope (Deferred to Future Iterations)
 * Native mobile apps (iOS / Android) — currently addressed via responsive Web SPA.
@@ -130,8 +135,9 @@ WorkTrack Modular Architecture:
 
 ## 7. Expected Outcomes & ROI
 
+These are product objectives, not measured results. Admin master-data workflows are currently integrated; other operational screens remain demo/local-storage workflows, and surveillance telemetry is simulated. No attendance, incident-response, or ROI reduction has been verified.
+
 1. **100% Elimination of Attendance Discrepancies:** Automated server-side validation eliminates unverified or overlapping shift claims.
 2. **Auditable Operational Accountability:** Report version snapshots protect both client and agency in the event of disputed incidents.
 3. **90% Reduction in Robbery Hotspot Response Latency:** Hourly AI surveillance coupled with human verification ensures anomalies (unattended cash drawers, safe room breaches) are addressed within minutes rather than discovering them days later.
 4. **Enhanced Client Trust & Retention:** Providing store owners with transparent shift feeds and direct feedback threads creates long-term client loyalty.
-

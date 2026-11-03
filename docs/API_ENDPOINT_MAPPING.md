@@ -1,6 +1,7 @@
 # 🗺️ API Endpoint Mapping: Frontend-to-Backend Matrix
 
 > **Purpose:** Traceability matrix correlating React.js components, user interactions, and UI actions to backend Django REST Framework endpoints.
+> **Integration status:** Phase 1 Admin employee, customer, and assignment workflows are connected to these APIs. Later workflow sections document available backend endpoints; they are not yet fully integrated into their frontend pages.
 
 ---
 
@@ -8,14 +9,14 @@
 
 | Frontend Page / Component | User Action | HTTP | Backend Endpoint | Role | Payload / Parameters | Success Response | Business Validation |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `src/pages/auth/Login.jsx` | Submits login credentials | `POST` | `/api/v1/auth/login/` | Public | `{"email", "password"}` | `{tokens: {access, refresh}, user}` | Verifies email & hashed password |
-| `src/pages/auth/SignUp.jsx` | Self-registers as employee or customer | `POST` | `/api/v1/auth/register/` | Public | `{"full_name", "email", "password", "confirm_password", "role", "company_name"}` | `{message, tokens, user}` | Only Employee/Customer allowed; creates profile |
+| `src/pages/auth/Login.jsx` | Submits login credentials | `POST` | `/api/v1/auth/login/` | Public | `{"email", "password"}` | `{access, refresh, user}` | Verifies email & hashed password |
+| `src/pages/auth/SignUp.jsx` | Self-registers as employee or customer | `POST` | `/api/v1/auth/register/` | Public | `{"first_name", "last_name", "email", "password", "confirm_password", "role", "company_name"}` | `{message, access, refresh, user}` | Only Employee/Customer allowed; creates profile |
 | `src/context/AuthContext.jsx` | Silent token refresh loop / on 401 | `POST` | `/api/v1/auth/refresh/` | Public | `{"refresh"}` | `{access, refresh}` | Validates refresh token signature & rotates |
-| `src/context/AuthContext.jsx` | Clicks "Log Out" | `POST` | `/api/v1/auth/logout/` | Auth | `{"refresh"}` | `{detail}` | Blacklists refresh token |
-| `src/context/AuthContext.jsx` | App initialization / hydration | `GET` | `/api/v1/auth/me/` | Auth | None (Bearer header) | `{id, email, fullName, role, ...}` | Returns active user and role profile |
-| `src/pages/auth/ForgotPassword.jsx` | Submits recovery email | `POST` | `/api/v1/auth/password-reset/` | Public | `{"email"}` | `{detail}` | Generates reset token & dispatches email |
-| `src/pages/auth/ResetPassword.jsx` | Submits new credentials | `POST` | `/api/v1/auth/password-reset/confirm/` | Public | `{"uid", "token", "new_password", "confirm_new_password"}` | `{detail}` | Validates token and updates password |
-| `src/pages/employee/EmployeeProfile.jsx` | Updates password | `POST` | `/api/v1/auth/change-password/` | Auth | `{"old_password", "new_password", "confirm_new_password"}` | `{detail}` | Validates old password |
+| `src/context/AuthContext.jsx` | Clicks "Log Out" | `POST` | `/api/v1/auth/logout/` | Auth | `{"refresh"}` | `{message}` | Blacklists refresh token |
+| `src/context/AuthContext.jsx` | App initialization / hydration | `GET` | `/api/v1/auth/me/` | Auth | None; access token in `Authorization: Bearer` header | `{id, email, username, fullName, role, employeeProfile, customerProfile, ...}` | Returns the authenticated user's profile |
+| `src/pages/auth/ForgotPassword.jsx` | Submits recovery email | `POST` | `/api/v1/auth/password-reset/` | Public | `{"email"}` | `{message}` | Generic response prevents account enumeration |
+| `src/pages/auth/ResetPassword.jsx` | Submits new credentials | `POST` | `/api/v1/auth/password-reset/confirm/` | Public | `{"uid", "token", "new_password", "confirm_new_password"}` | `{message}` | Validates token and updates password |
+| `src/pages/employee/EmployeeProfile.jsx` | Updates password | `POST` | `/api/v1/auth/change-password/` | Auth | `{"old_password", "new_password", "confirm_new_password"}` | `{message}` | Validates old password |
 
 ---
 
@@ -23,13 +24,20 @@
 
 | Frontend Page / Component | User Action | HTTP | Backend Endpoint | Role | Payload / Parameters | Success Response | Business Validation |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `src/pages/admin/AdminEmployees.jsx` | Reads employee list | `GET` | `/api/v1/employees/` | `ADMIN` | Query: `?search=`, `?page=` | Paginated `[EmployeeProfile]` | Admin role required |
-| `src/pages/admin/AdminEmployees.jsx` | Adds new employee | `POST` | `/api/v1/employees/` | `ADMIN` | `{user: {email, password, ...}, employee_code, designation}` | Created `EmployeeProfile` | Enforces unique `email` & `employee_code` |
-| `src/pages/admin/AdminEmployees.jsx` | Deactivates employee | `DELETE` | `/api/v1/employees/{id}/` | `ADMIN` | Path `id` | HTTP 204 No Content | Soft-deletes linked user (`is_active=False`) |
-| `src/pages/admin/AdminCustomers.jsx` | Reads client stores | `GET` | `/api/v1/customers/` | `ADMIN` | Query: `?search=`, `?page=` | Paginated `[CustomerProfile]` | Admin role required |
-| `src/pages/admin/AdminCustomers.jsx` | Registers client store | `POST` | `/api/v1/customers/` | `ADMIN` | `{user: {email, password}, customer_code, company_name, timezone}` | Created `CustomerProfile` | Enforces unique `customer_code` |
-| `src/pages/admin/AdminAssignments.jsx`| Reads contract pairings | `GET` | `/api/v1/assignments/` | `ADMIN` | Query: `?status=ACTIVE` | Paginated `[Assignment]` | Admin role required |
-| `src/pages/admin/AdminAssignments.jsx`| Pairs guard to store | `POST` | `/api/v1/assignments/` | `ADMIN` | `{employee: <id>, customer: <id>, notes}` | Created `Assignment` | Rejects duplicate active pairing |
+| `src/pages/admin/EmployeeManagement.jsx` | Lists employees | `GET` | `/api/v1/employees/` | `ADMIN` | Page-number pagination; frontend loads all pages | Paginated employee profiles | Admin sees all; employee sees self only; other roles see none |
+| `src/pages/admin/EmployeeManagement.jsx` | Creates employee login/profile | `POST` | `/api/v1/employees/` | `ADMIN` | `{employeeId, email, firstName, lastName, password, phone, roleTitle, department, joiningDate, status}` | Created employee profile (password omitted) | Unique email/code; password validated/hashed |
+| `src/pages/admin/EmployeeManagement.jsx` | Edits employee profile | `PATCH` | `/api/v1/employees/{id}/` | `ADMIN` | Profile fields; no password | Updated employee profile | Email uniqueness validated |
+| `src/pages/admin/EmployeeManagement.jsx` | Activates/deactivates employee login | `POST` | `/api/v1/employees/{id}/toggle_status/` | `ADMIN` | Empty body | `{id, status}` | Updates profile and linked user `is_active` |
+| `src/services/adminApi.js` | Soft-deletes employee profile | `DELETE` | `/api/v1/employees/{id}/` | `ADMIN` | Path `id` | HTTP 204 | Preserves profile and disables linked login; management UI uses status toggle |
+| `src/pages/admin/CustomerManagement.jsx` | Lists customers | `GET` | `/api/v1/customers/` | `ADMIN` | Page-number pagination; frontend loads all pages | Paginated customer profiles | Admin sees all; customer sees self only; other roles see none |
+| `src/pages/admin/CustomerManagement.jsx` | Creates customer login/profile | `POST` | `/api/v1/customers/` | `ADMIN` | `{companyName, industry, contactPerson, email, password, phone, address, accountStatus}` | Created customer profile with generated `customerCode` | Unique email; password validated/hashed |
+| `src/pages/admin/CustomerManagement.jsx` | Edits customer profile | `PATCH` | `/api/v1/customers/{id}/` | `ADMIN` | Profile fields; no password | Updated customer profile | Email uniqueness validated |
+| `src/pages/admin/CustomerManagement.jsx` | Activates/suspends customer login | `POST` | `/api/v1/customers/{id}/toggle_status/` | `ADMIN` | Empty body | `{id, accountStatus}` | Updates profile and linked user `is_active` |
+| `src/services/adminApi.js` | Soft-deletes customer profile | `DELETE` | `/api/v1/customers/{id}/` | `ADMIN` | Path `id` | HTTP 204 | Preserves profile and disables linked login; management UI uses status toggle |
+| `src/pages/admin/EmployeeAssignments.jsx` | Lists employee-customer assignments | `GET` | `/api/v1/assignments/` | `ADMIN` | Page-number pagination; optional status/employee/customer filters | Paginated assignments | Employee/customer see only their related assignments |
+| `src/pages/admin/EmployeeAssignments.jsx` | Creates assignment | `POST` | `/api/v1/assignments/` | `ADMIN` | `{employeeId, customerId, notes, status}` | Created assignment | Requires active employee/customer; rejects duplicate active assignment |
+| `src/pages/admin/EmployeeAssignments.jsx` | Revokes/reactivates assignment | `POST` | `/api/v1/assignments/{id}/revoke/` or `/approve/` | `ADMIN` | Empty body | `{id, status}` | Re-activation rechecks active profiles and duplicate assignments |
+| `src/services/adminApi.js` | Deletes assignment record | `DELETE` | `/api/v1/assignments/{id}/` | `ADMIN` | Path `id` | HTTP 204 | Removes the assignment record |
 | `src/pages/admin/AdminShifts.jsx` | Reads shift templates | `GET` | `/api/v1/shifts/templates/` | Auth | None | `[Shift]` | Read-only for non-admins |
 | `src/pages/admin/AdminShifts.jsx` | Creates shift template | `POST` | `/api/v1/shifts/templates/` | `ADMIN` | `{name, start_time, end_time, is_overnight, color_tag}` | Created `Shift` | Validates time ranges |
 | `src/pages/admin/AdminShifts.jsx` | Schedules shift | `POST` | `/api/v1/shifts/schedules/` | `ADMIN` | `{assignmentId, shiftId, shiftDate}` | Created `ShiftAssignment` | Assignment must be ACTIVE |
@@ -83,4 +91,3 @@
 | `src/pages/admin/AdminDashboard.jsx` | Renders Admin KPIs | `GET` | `/api/v1/dashboard/admin/` | `ADMIN` | None | `{kpis, weekly_trend, shift_distribution}` | Computes rates via database aggregations |
 | `src/pages/employee/EmployeeDashboard.jsx`| Renders Guard Home | `GET` | `/api/v1/dashboard/employee/` | `EMPLOYEE` | None | `{today_shift, punch_status, today_report}` | Custom profile lookup |
 | `src/pages/customer/CustomerDashboard.jsx`| Renders Client Home| `GET` | `/api/v1/dashboard/customer/` | `CUSTOMER` | None | `{assigned_staff_count, active_shifts, recent_reports}` | Client profile lookup |
-

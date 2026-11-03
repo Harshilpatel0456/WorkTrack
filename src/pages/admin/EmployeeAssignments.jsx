@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useApp } from '../../context/AppContext';
+import React, { useCallback, useEffect, useState } from 'react';
+import { adminApi } from '../../services/adminApi';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import {
@@ -9,8 +9,6 @@ import {
   Filter,
   CheckCircle,
   XCircle,
-  Clock,
-  Calendar,
   Building2,
   User,
   ShieldCheck,
@@ -18,19 +16,54 @@ import {
 } from 'lucide-react';
 
 export const EmployeeAssignments = () => {
-  const { assignments, employees, customers, shifts, createAssignment, updateAssignmentStatus } = useApp();
+  const [assignments, setAssignments] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [assignmentRecords, employeeRecords, customerRecords] = await Promise.all([
+        adminApi.assignments.list(),
+        adminApi.employees.list(),
+        adminApi.customers.list(),
+      ]);
+      setAssignments(assignmentRecords.map((assignment) => ({
+        ...assignment,
+        status: assignment.status === 'ACTIVE'
+          ? 'Approved'
+          : assignment.status === 'REVOKED' ? 'Revoked' : 'Pending',
+        assignmentDate: assignment.created_at?.slice(0, 10) || '',
+      })));
+      setEmployees(employeeRecords.map((employee) => ({
+        ...employee,
+        name: employee.fullName || [employee.firstName, employee.lastName].filter(Boolean).join(' '),
+      })));
+      setCustomers(customerRecords);
+    } catch (loadError) {
+      setError(loadError.message || 'Unable to load assignment data.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const [activeTab, setActiveTab] = useState('active'); // 'active' | 'history'
   const [searchQuery, setSearchQuery] = useState('');
   const [customerFilter, setCustomerFilter] = useState('All');
-  const [shiftFilter, setShiftFilter] = useState('All');
 
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     customerId: customers[0]?.id || '',
     employeeId: employees[0]?.id || '',
-    shiftId: shifts[0]?.id || '',
-    assignmentDate: new Date().toISOString().split('T')[0],
     notes: '',
   });
 
@@ -38,48 +71,74 @@ export const EmployeeAssignments = () => {
     setFormData({
       customerId: customers[0]?.id || '',
       employeeId: employees[0]?.id || '',
-      shiftId: shifts[0]?.id || '',
-      assignmentDate: new Date().toISOString().split('T')[0],
-      notes: 'Standard shift allocation approved by Admin.',
+      notes: 'Customer assignment approved by Admin.',
     });
     setIsAssignModalOpen(true);
   };
 
-  const handleCreateAssignment = (e) => {
+  const handleCreateAssignment = async (e) => {
     e.preventDefault();
-    const result = createAssignment(formData);
-    if (result.success) {
+    setSaving(true);
+    setError('');
+    try {
+      await adminApi.assignments.create({
+        employeeId: formData.employeeId,
+        customerId: formData.customerId,
+        notes: formData.notes,
+        status: 'ACTIVE',
+      });
       setIsAssignModalOpen(false);
+      setNotice('Employee assigned to customer.');
+      await loadData();
+    } catch (saveError) {
+      setError(saveError.message || 'Unable to create assignment.');
+    } finally {
+      setSaving(false);
     }
   };
 
+  const handleAssignmentStatus = async (assignment, nextStatus) => {
+    setSaving(true);
+    setError('');
+    try {
+      if (nextStatus === 'Revoked') await adminApi.assignments.revoke(assignment.id);
+      else await adminApi.assignments.approve(assignment.id);
+      setNotice(nextStatus === 'Revoked' ? 'Assignment revoked.' : 'Assignment activated.');
+      await loadData();
+    } catch (saveError) {
+      setError(saveError.message || 'Unable to update assignment.');
+    } finally {
+      setSaving(false);
+    }
+  };
   const filteredAssignments = assignments.filter((asg) => {
     const isTabMatch =
       activeTab === 'active'
         ? asg.status === 'Approved'
-        : asg.status === 'Revoked' || asg.status === 'Completed';
+        : asg.status !== 'Approved';
 
     const matchesSearch =
-      asg.employeeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      asg.customerName.toLowerCase().includes(searchQuery.toLowerCase());
+      (asg.employeeName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (asg.customerName || '').toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesCustomer = customerFilter === 'All' || asg.customerId === customerFilter;
-    const matchesShift = shiftFilter === 'All' || asg.shiftId === shiftFilter;
 
-    return isTabMatch && matchesSearch && matchesCustomer && matchesShift;
+    return isTabMatch && matchesSearch && matchesCustomer;
   });
 
   return (
     <div className="space-y-6">
+      {error && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</div>}
+      {notice && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700">{notice}</div>}
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
             <Briefcase className="w-6 h-6 text-[#245CE2]" />
-            Employee – Customer Shift Allocations
+            Employee – Customer Assignments
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Authoritative allocation matrix. Assign personnel to client accounts across shifts with administrative authorization.
+            Assign employees to customer accounts and manage their access.
           </p>
         </div>
 
@@ -98,7 +157,7 @@ export const EmployeeAssignments = () => {
         <div>
           <span className="font-bold">Enterprise Allocation Policy Active:</span>
           <p className="text-blue-700 mt-0.5 leading-relaxed">
-            One customer can have multiple staff members. One staff member can be allocated across multiple customers on distinct shifts. Only Admin approvals grant access to the customer workspace.
+            This record grants employee-to-customer access. Shift templates and dated shift scheduling are managed separately in the next integration phase.
           </p>
         </div>
       </div>
@@ -165,17 +224,18 @@ export const EmployeeAssignments = () => {
               <tr className="bg-slate-50/75 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
                 <th className="py-3.5 px-4 sm:px-6">Allocated Staff</th>
                 <th className="py-3.5 px-4">Client Organization</th>
-                <th className="py-3.5 px-4">Shift Schedule</th>
-                <th className="py-3.5 px-4">Assignment Date</th>
+                <th className="py-3.5 px-4">Assigned On</th>
                 <th className="py-3.5 px-4">Approval Status</th>
                 <th className="py-3.5 px-4">Administrative Notes</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-              {filteredAssignments.length === 0 ? (
+              {loading ? (
+                <tr><td colSpan="6" className="py-8 text-center text-slate-400">Loading assignments…</td></tr>
+              ) : filteredAssignments.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="py-8 text-center text-slate-400">
+                  <td colSpan="6" className="py-8 text-center text-slate-400">
                     No assignment records found for this view.
                   </td>
                 </tr>
@@ -200,15 +260,7 @@ export const EmployeeAssignments = () => {
                       </span>
                     </td>
 
-                    {/* Shift */}
-                    <td className="py-3.5 px-4">
-                      <span className="bg-slate-100 text-slate-800 font-medium px-2.5 py-1 rounded-md text-[11px] inline-flex items-center gap-1.5">
-                        <Clock className="w-3 h-3 text-[#245CE2]" />
-                        {asg.shiftName}
-                      </span>
-                    </td>
-
-                    {/* Date */}
+                    {/* Assignment creation date */}
                     <td className="py-3.5 px-4 text-slate-600 font-mono">
                       {asg.assignmentDate}
                     </td>
@@ -227,7 +279,8 @@ export const EmployeeAssignments = () => {
                     <td className="py-3.5 px-4 text-right">
                       {asg.status === 'Approved' ? (
                         <button
-                          onClick={() => updateAssignmentStatus(asg.id, 'Revoked')}
+                          onClick={() => handleAssignmentStatus(asg, 'Revoked')}
+                          disabled={saving}
                           className="px-2.5 py-1 text-rose-600 hover:bg-rose-50 rounded-lg text-xs font-semibold transition-colors border border-rose-200"
                           title="Revoke access"
                         >
@@ -235,7 +288,8 @@ export const EmployeeAssignments = () => {
                         </button>
                       ) : (
                         <button
-                          onClick={() => updateAssignmentStatus(asg.id, 'Approved')}
+                          onClick={() => handleAssignmentStatus(asg, 'Approved')}
+                          disabled={saving}
                           className="px-2.5 py-1 text-emerald-600 hover:bg-emerald-50 rounded-lg text-xs font-semibold transition-colors border border-emerald-200"
                           title="Re-approve assignment"
                         >
@@ -256,7 +310,7 @@ export const EmployeeAssignments = () => {
         isOpen={isAssignModalOpen}
         onClose={() => setIsAssignModalOpen(false)}
         title="Create Employee – Customer Allocation"
-        subtitle="Allocate staff to a client enterprise under a specific shift template"
+        subtitle="Grant an employee access to a customer account. Shift scheduling is managed separately."
       >
         <form onSubmit={handleCreateAssignment} className="space-y-4 text-xs">
           <div>
@@ -269,7 +323,7 @@ export const EmployeeAssignments = () => {
               onChange={(e) => setFormData({ ...formData, customerId: e.target.value })}
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#245CE2]"
             >
-              {customers.map((c) => (
+              {customers.filter((c) => c.accountStatus !== 'SUSPENDED').map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.companyName} ({c.industry})
                 </option>
@@ -287,43 +341,12 @@ export const EmployeeAssignments = () => {
               onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#245CE2]"
             >
-              {employees.map((emp) => (
+              {employees.filter((emp) => emp.status === 'ACTIVE').map((emp) => (
                 <option key={emp.id} value={emp.id}>
                   {emp.name} ({emp.employeeId} • {emp.roleTitle})
                 </option>
               ))}
             </select>
-          </div>
-
-          <div>
-            <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Select Shift Schedule *
-            </label>
-            <select
-              required
-              value={formData.shiftId}
-              onChange={(e) => setFormData({ ...formData, shiftId: e.target.value })}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#245CE2]"
-            >
-              {shifts.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.startTime} – {s.endTime})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Assignment Effective Date
-            </label>
-            <input
-              type="date"
-              required
-              value={formData.assignmentDate}
-              onChange={(e) => setFormData({ ...formData, assignmentDate: e.target.value })}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#245CE2]"
-            />
           </div>
 
           <div>

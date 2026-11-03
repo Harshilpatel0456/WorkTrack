@@ -13,17 +13,17 @@
 | **02** | Django & Environment Init | Virtualenv, dependencies, settings, SimpleJWT, Celery init | `COMPLETED` |
 | **03** | Database Models & Migrations | PostgreSQL models across all 11 modular apps + seed data | `COMPLETED` |
 | **04** | Authentication & RBAC | Custom User model, email login, SimpleJWT token rotation | `COMPLETED` |
-| **05** | Master Staff & Client Management | EmployeeProfile & CustomerProfile CRUD APIs + permissions | `COMPLETED` |
-| **06** | Contract Allocations | Admin-governed Employee-Customer contract pairing APIs | `COMPLETED` |
-| **07** | Shift Templates & Scheduling | Shift templates, daily roster scheduling, overnight flags | `COMPLETED` |
-| **08** | Attendance Engine | Sequential punch validation, duplicate check-in prevention | `COMPLETED` |
-| **09** | Daily Reporting & Versioning | One-to-one reports, immutable ReportVersion JSON snapshots | `COMPLETED` |
-| **10** | Threaded Feedback & Discussions | Customer comments, employee replies, boundary isolation | `COMPLETED` |
-| **11** | Hourly CCTV Surveillance | 10 camera feeds, AI telemetry, guard audit verification | `COMPLETED` |
-| **12** | Multi-Cadence Notifications | Notification events, digest preferences, Celery tasks | `COMPLETED` |
-| **13** | Role Analytics Dashboards | Admin KPIs, Employee Roster feed, Customer store telemetry | `COMPLETED` |
-| **14** | Automated Testing & Hardening | pytest test suite (19/19 passing), IDOR & RBAC defenses | `COMPLETED` |
-| **15** | React Client API Integration | Axios interceptor wiring connecting 28 frontend pages | `PLANNED` |
+| **05** | Master Staff & Client Management | Backend CRUD APIs; Admin employee/customer pages integrated with PostgreSQL | `COMPLETED` |
+| **06** | Contract Allocations | Backend assignment APIs; Admin assignment page integrated; shift/date scheduling remains separate | `COMPLETED` |
+| **07** | Shift Templates & Scheduling | Backend shift templates and roster APIs; frontend remains demo/local state | `BACKEND COMPLETE` |
+| **08** | Attendance Engine | Backend sequential punch validation; frontend remains demo/local state | `BACKEND COMPLETE` |
+| **09** | Daily Reporting & Versioning | Backend reports and immutable version snapshots; frontend remains demo/local state | `BACKEND COMPLETE` |
+| **10** | Threaded Feedback & Discussions | Backend comments/replies and isolation; frontend remains demo/local state | `BACKEND COMPLETE` |
+| **11** | Hourly CCTV Surveillance | Backend audit workflow and simulated telemetry; no camera/AI integration | `BACKEND DEMO` |
+| **12** | Multi-Cadence Notifications | Backend notification preferences/tasks; frontend remains demo/local state | `BACKEND COMPLETE` |
+| **13** | Role Analytics Dashboards | Backend dashboard endpoints; frontend dashboards remain demo/local state | `BACKEND COMPLETE` |
+| **14** | Automated Testing & Hardening | pytest coverage for backend rules, access isolation, and Phase 1 Admin APIs | `COMPLETED` |
+| **15** | React Client API Integration | Phase 1 Admin integration complete; Phases 2–6 remain | `IN PROGRESS` |
 | **16** | Production Cloud Deployment | Nginx, Gunicorn, RDS PostgreSQL, Celery daemon setup | `PLANNED` |
 
 ---
@@ -42,8 +42,8 @@ gantt
     Phase 5: Attendance & Reports Engine     :done, p5, 2026-11-01, 2026-11-02
     Phase 6: Surveillance & Notifications    :done, p6, 2026-11-02, 2026-11-02
     section Quality & Integration
-    Phase 7: Automated pytest Suite (19/19)  :done, p7, 2026-11-02, 2026-11-02
-    Phase 8: React Axios Integration         :active, p8, 2026-11-03, 2026-11-05
+    Phase 7: Automated pytest Suite (41/41)  :done, p7, 2026-11-02, 2026-11-02
+    Phase 8: React API Integration            :active, p8, 2026-11-03, 2026-11-05
     Phase 9: Production Cloud Deployment     :p9, 2026-11-06, 2026-11-08
 ```
 
@@ -55,9 +55,8 @@ gantt
 * **M1 (Architecture Baseline):** Approved SRS, relational schema, and API contracts.
 * **M2 (Relational Core):** Applied migrations for all 11 apps (`accounts`, `employees`, `customers`, `assignments`, `shifts`, `attendance`, `reports`, `feedback`, `notifications`, `surveillance`, `audit`).
 * **M3 (API Endpoints):** Verified OpenAPI 3.0.3 schema generation via `drf-spectacular`.
-* **M4 (Test Verification):** 100% pass rate across 19 unit and integration test cases in pytest.
+* **M4 (Test Verification):** Backend pytest suite passes, including dedicated tests for Phase 1 admin APIs. Run the current suite for the authoritative count.
 
 ### Next Sprints
-* **M5 (Frontend Client Wiring):** Configure `apiClient.js` with Axios interceptors to route React state mutations to Django `/api/v1/` routes.
+* **M5 (Frontend Client Wiring):** Continue with shift scheduling, attendance, reports, customer operations, and notifications; replace demo local-storage business data with API data phase by phase.
 * **M6 (Cloud Release):** Provision Ubuntu production droplet, configure Nginx SSL, and execute dry-run deployment.
-
