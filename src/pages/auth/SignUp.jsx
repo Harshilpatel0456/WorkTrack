@@ -45,6 +45,12 @@ export const SignUp = () => {
       return;
     }
 
+    const nameParts = fullName.trim().split(/\s+/);
+    if (nameParts.length < 2) {
+      setError('Please enter your first and last name.');
+      return;
+    }
+
     if (!acceptTerms) {
       setError('You must accept the terms of service.');
       return;
@@ -56,12 +62,13 @@ export const SignUp = () => {
     }
 
     const payload = {
-      fullName: fullName.trim(),
+      first_name: nameParts[0],
+      last_name: nameParts.slice(1).join(' '),
       email: email.trim().toLowerCase(),
       password,
-      confirmPassword,
+      confirm_password: confirmPassword,
       role, // EMPLOYEE or CUSTOMER
-      companyName: role === 'CUSTOMER' ? companyName.trim() : undefined,
+      ...(role === 'CUSTOMER' ? { company_name: companyName.trim() } : {}),
     };
 
     const res = await register(payload);
@@ -307,4 +314,3 @@ export const SignUp = () => {
     </div>
   );
 };
-

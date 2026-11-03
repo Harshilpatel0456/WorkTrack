@@ -67,8 +67,10 @@ export const AuthProvider = ({ children }) => {
     // 1. Attempt Real Backend API Authentication
     try {
       const response = await authApi.login({ email: cleanEmail, password });
-      if (response && response.tokens) {
-        tokenStorage.setTokens(response.tokens.access, response.tokens.refresh);
+      const accessToken = response?.access || response?.tokens?.access;
+      const refreshToken = response?.refresh || response?.tokens?.refresh;
+      if (accessToken && refreshToken) {
+        tokenStorage.setTokens(accessToken, refreshToken);
         const userObj = response.user || {};
         const roleLower = (userObj.role || 'employee').toLowerCase();
 
@@ -180,8 +182,10 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     try {
       const response = await authApi.register(registrationData);
-      if (response && response.tokens) {
-        tokenStorage.setTokens(response.tokens.access, response.tokens.refresh);
+      const accessToken = response?.access || response?.tokens?.access;
+      const refreshToken = response?.refresh || response?.tokens?.refresh;
+      if (accessToken && refreshToken) {
+        tokenStorage.setTokens(accessToken, refreshToken);
         const userObj = response.user || {};
         const roleLower = (userObj.role || registrationData.role || 'employee').toLowerCase();
 
