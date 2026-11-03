@@ -1,0 +1,66 @@
+services:
+  # PostgreSQL 16 Database Service
+  db:
+    image: postgres:16-alpine
+    container_name: worktrack_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-worktrack_db}
+      POSTGRES_USER: ${DB_USER:-worktrack_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-worktrack_secure_pass_2026}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - worktrack_network
+
+  # Django REST Framework Backend Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: worktrack_backend
+    restart: unless-stopped
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - ./backend:/app
+      - /app/.venv
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_ENGINE=postgresql
+      - DB_NAME=${DB_NAME:-worktrack_db}
+      - DB_USER=${DB_USER:-worktrack_user}
+      - DB_PASSWORD=${DB_PASSWORD:-worktrack_secure_pass_2026}
+      - DB_HOST=db
+      - DB_PORT=5432
+      - SECRET_KEY=${SECRET_KEY:-django-insecure-worktrack-enterprise-super-secret-key-2026-prod}
+      - DEBUG=${DEBUG:-True}
+      - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0,backend
+      - CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+      - FRONTEND_URL=http://localhost:5173
+      - EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - worktrack_network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  worktrack_network:
+    driver: bridge
+

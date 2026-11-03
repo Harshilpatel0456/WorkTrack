@@ -4,6 +4,40 @@
 > **Tagline:** Smart Workforce. Transparent Reporting.  
 > **Target Scenario:** US Retail Store Security & Hourly Camera Snapshot Surveillance with AI Human Detection & Robbery Prevention.
 
+👉 **Looking to run the project right now? See [HOW_TO_RUN.md](HOW_TO_RUN.md) for full setup & testing steps.**
+
+---
+
+## 📚 Complete Project Documentation Hub
+
+All formal architecture, SRS, database, API, and engineering specifications are located in the [`docs/`](docs/) directory:
+
+| Document | Purpose |
+| :--- | :--- |
+| [README.md (Docs Hub)](docs/README.md) | Central documentation index & navigation guide |
+| [PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md) | Business problem, proposed solution, personas, and scope |
+| [REQUIREMENTS.md](docs/REQUIREMENTS.md) | Comprehensive functional (FR) and non-functional (NFR) requirements catalog |
+| [SOFTWARE_REQUIREMENTS_SPECIFICATION.md](docs/SOFTWARE_REQUIREMENTS_SPECIFICATION.md) | Academic IEEE Std 830-1998 formal SRS specification |
+| [SYSTEM_ARCHITECTURE.md](docs/SYSTEM_ARCHITECTURE.md) | Multi-tier architecture, request-response lifecycles, and Mermaid diagrams |
+| [DATABASE_DESIGN.md](docs/DATABASE_DESIGN.md) | PostgreSQL schema, model attributes, constraints, and indexes |
+| [ER_DIAGRAM.md](docs/ER_DIAGRAM.md) | Entity-Relationship diagrams in Mermaid syntax |
+| [API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md) | Django REST Framework API contract, pagination, error schemas, OpenAPI |
+| [API_ENDPOINT_MAPPING.md](docs/API_ENDPOINT_MAPPING.md) | Traceability matrix linking React components to `/api/v1/` endpoints |
+| [AUTHENTICATION_AND_AUTHORIZATION.md](docs/AUTHENTICATION_AND_AUTHORIZATION.md) | Custom User model, email login, SimpleJWT token rotation, and RBAC |
+| [BUSINESS_LOGIC.md](docs/BUSINESS_LOGIC.md) | Operational business rules, attendance invariants, and versioning rules |
+| [USER_ROLES_AND_PERMISSIONS.md](docs/USER_ROLES_AND_PERMISSIONS.md) | CRUD privilege matrix across Admin, Employee, and Customer roles |
+| [FRONTEND_DOCUMENTATION.md](docs/FRONTEND_DOCUMENTATION.md) | React 19 architecture, Vite setup, Tailwind CSS theme, and 28 routes |
+| [BACKEND_DOCUMENTATION.md](docs/BACKEND_DOCUMENTATION.md) | Django 5.x app structure, serializers, views, permissions, and settings |
+| [NOTIFICATION_SYSTEM.md](docs/NOTIFICATION_SYSTEM.md) | Multi-channel dispatch engine, client digest preferences, Celery tasks |
+| [SECURITY_GUIDELINES.md](docs/SECURITY_GUIDELINES.md) | IDOR defenses, role isolation, password hashing, and CORS/CSRF safeguards |
+| [TESTING_STRATEGY.md](docs/TESTING_STRATEGY.md) | Automated testing plan using pytest (19/19 passing test suite) |
+| [DEVELOPMENT_SETUP.md](docs/DEVELOPMENT_SETUP.md) | Windows development guide for setting up Node, Python, and PostgreSQL |
+| [DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) | Production deployment architecture, Gunicorn, Nginx, HTTPS, and S3 |
+| [DEVELOPMENT_ROADMAP.md](docs/DEVELOPMENT_ROADMAP.md) | Phased implementation schedule, milestones, and status indicators |
+| [CODING_GUIDELINES.md](docs/CODING_GUIDELINES.md) | PEP 8, DRF conventions, React component standards, and Git conventions |
+| [CHANGELOG.md](docs/CHANGELOG.md) | Semantic version release history and completed deliverables |
+| [OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md) | Catalog of open architectural decisions, assumptions, and edge cases |
+
 ---
 
 ## 🌟 Executive Overview: The Store Security Scenario
@@ -33,6 +67,17 @@ Because a security operator cannot sit and watch continuous video across all cam
 
 ## 🚀 Running the Project Locally
 
+### 1. Start PostgreSQL & Django Backend (via Docker Compose)
+```bash
+# Start PostgreSQL 16 & Django in Docker (zero Windows PostgreSQL install required)
+docker compose up -d
+
+# Seed initial demo accounts & records into PostgreSQL
+docker compose exec backend python manage.py seed_demo_data
+# API running at http://127.0.0.1:8000/ | Swagger UI at http://127.0.0.1:8000/api/v1/docs/
+```
+
+### 2. Start React.js Frontend
 ```bash
 # 1. Install dependencies
 npm install

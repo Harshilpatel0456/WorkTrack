@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { ProtectedRoute } from './components/common/ProtectedRoute';
 
 // Layouts
 import { AdminLayout } from './layouts/AdminLayout';
@@ -11,6 +12,9 @@ import { CustomerLayout } from './layouts/CustomerLayout';
 
 // Auth Pages
 import { Login } from './pages/auth/Login';
+import { SignUp } from './pages/auth/SignUp';
+import { ForgotPassword } from './pages/auth/ForgotPassword';
+import { ResetPassword } from './pages/auth/ResetPassword';
 
 // Admin Pages
 import { AdminOverview } from './pages/admin/AdminOverview';
@@ -50,9 +54,10 @@ import { CustomerProfile } from './pages/customer/CustomerProfile';
 const RootRedirect = () => {
   const { isAuthenticated, role } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (role === 'admin') return <Navigate to="/admin" replace />;
-  if (role === 'employee') return <Navigate to="/employee" replace />;
-  if (role === 'customer') return <Navigate to="/customer" replace />;
+  const roleLower = (role || '').toLowerCase();
+  if (roleLower === 'admin') return <Navigate to="/admin" replace />;
+  if (roleLower === 'employee') return <Navigate to="/employee" replace />;
+  if (roleLower === 'customer') return <Navigate to="/customer" replace />;
   return <Navigate to="/login" replace />;
 };
 
@@ -63,56 +68,66 @@ function App() {
         <BrowserRouter>
           <ErrorBoundary>
             <Routes>
-            {/* Index & Auth */}
-            <Route path="/" element={<RootRedirect />} />
-            <Route path="/login" element={<Login />} />
+              {/* Index & Auth Pages */}
+              <Route path="/" element={<RootRedirect />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<SignUp />} />
+              <Route path="/signup" element={<SignUp />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
 
-            {/* Admin Routes */}
-            <Route path="/admin" element={<AdminLayout />}>
-              <Route index element={<AdminOverview />} />
-              <Route path="employees" element={<EmployeeManagement />} />
-              <Route path="customers" element={<CustomerManagement />} />
-              <Route path="assignments" element={<EmployeeAssignments />} />
-              <Route path="shifts" element={<ShiftManagement />} />
-              <Route path="attendance" element={<AttendanceMonitoring />} />
-              <Route path="reports" element={<DailyReportsMonitoring />} />
-              <Route path="feedback" element={<FeedbackMonitoring />} />
-              <Route path="notifications" element={<AdminNotifications />} />
-              <Route path="settings" element={<AdminSettings />} />
-              <Route path="profile" element={<AdminSettings />} />
-            </Route>
+              {/* Admin Protected Routes */}
+              <Route element={<ProtectedRoute allowedRoles={['admin', 'ADMIN']} />}>
+                <Route path="/admin" element={<AdminLayout />}>
+                  <Route index element={<AdminOverview />} />
+                  <Route path="employees" element={<EmployeeManagement />} />
+                  <Route path="customers" element={<CustomerManagement />} />
+                  <Route path="assignments" element={<EmployeeAssignments />} />
+                  <Route path="shifts" element={<ShiftManagement />} />
+                  <Route path="attendance" element={<AttendanceMonitoring />} />
+                  <Route path="reports" element={<DailyReportsMonitoring />} />
+                  <Route path="feedback" element={<FeedbackMonitoring />} />
+                  <Route path="notifications" element={<AdminNotifications />} />
+                  <Route path="settings" element={<AdminSettings />} />
+                  <Route path="profile" element={<AdminSettings />} />
+                </Route>
+              </Route>
 
-            {/* Employee Routes */}
-            <Route path="/employee" element={<EmployeeLayout />}>
-              <Route index element={<EmployeeOverview />} />
-              <Route path="surveillance" element={<HourlySurveillance />} />
-              <Route path="shifts" element={<MyShifts />} />
-              <Route path="attendance" element={<EmployeeAttendance />} />
-              <Route path="daily-report" element={<DailyReportForm />} />
-              <Route path="history" element={<ReportHistory />} />
-              <Route path="feedback" element={<EmployeeFeedback />} />
-              <Route path="notifications" element={<EmployeeNotifications />} />
-              <Route path="profile" element={<EmployeeProfile />} />
-            </Route>
+              {/* Employee Protected Routes */}
+              <Route element={<ProtectedRoute allowedRoles={['employee', 'EMPLOYEE']} />}>
+                <Route path="/employee" element={<EmployeeLayout />}>
+                  <Route index element={<EmployeeOverview />} />
+                  <Route path="surveillance" element={<HourlySurveillance />} />
+                  <Route path="shifts" element={<MyShifts />} />
+                  <Route path="attendance" element={<EmployeeAttendance />} />
+                  <Route path="daily-report" element={<DailyReportForm />} />
+                  <Route path="history" element={<ReportHistory />} />
+                  <Route path="feedback" element={<EmployeeFeedback />} />
+                  <Route path="notifications" element={<EmployeeNotifications />} />
+                  <Route path="profile" element={<EmployeeProfile />} />
+                </Route>
+              </Route>
 
-            {/* Customer Routes */}
-            <Route path="/customer" element={<CustomerLayout />}>
-              <Route index element={<CustomerOverview />} />
-              <Route path="surveillance" element={<CustomerSurveillance />} />
-              <Route path="employees" element={<CustomerAssignedEmployees />} />
-              <Route path="reports" element={<CustomerDailyReports />} />
-              <Route path="shift-reports" element={<CustomerShiftReports />} />
-              <Route path="feedback" element={<CustomerFeedback />} />
-              <Route path="notifications" element={<CustomerNotifications />} />
-              <Route path="settings" element={<CustomerNotificationSettings />} />
-              <Route path="profile" element={<CustomerProfile />} />
-            </Route>
+              {/* Customer Protected Routes */}
+              <Route element={<ProtectedRoute allowedRoles={['customer', 'CUSTOMER']} />}>
+                <Route path="/customer" element={<CustomerLayout />}>
+                  <Route index element={<CustomerOverview />} />
+                  <Route path="surveillance" element={<CustomerSurveillance />} />
+                  <Route path="employees" element={<CustomerAssignedEmployees />} />
+                  <Route path="reports" element={<CustomerDailyReports />} />
+                  <Route path="shift-reports" element={<CustomerShiftReports />} />
+                  <Route path="feedback" element={<CustomerFeedback />} />
+                  <Route path="notifications" element={<CustomerNotifications />} />
+                  <Route path="settings" element={<CustomerNotificationSettings />} />
+                  <Route path="profile" element={<CustomerProfile />} />
+                </Route>
+              </Route>
 
-            {/* Catch-all */}
-            <Route path="*" element={<RootRedirect />} />
-          </Routes>
-        </ErrorBoundary>
-      </BrowserRouter>
+              {/* Catch-all */}
+              <Route path="*" element={<RootRedirect />} />
+            </Routes>
+          </ErrorBoundary>
+        </BrowserRouter>
       </AppProvider>
     </AuthProvider>
   );
