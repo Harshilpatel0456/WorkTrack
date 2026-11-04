@@ -63,7 +63,13 @@ export const Login = () => {
         </p>
       </div>
 
-      <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div
+        className={`w-full ${
+          DEMO_MODE
+            ? 'max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-start'
+            : 'max-w-md'
+        }`}
+      >
         {/* Demo credentials are shown only when demo mode is explicitly enabled. */}
         {DEMO_MODE && <div className="lg:col-span-5 space-y-4">
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-card">
@@ -180,7 +186,7 @@ export const Login = () => {
         </div>}
 
         {/* Right Column: Sign In Form */}
-        <div className={DEMO_MODE ? 'lg:col-span-7' : 'lg:col-span-12'}>
+        <div className={DEMO_MODE ? 'lg:col-span-7' : 'w-full'}>
           <div className="bg-white p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-card">
             <div className="mb-6">
               <h2 className="text-xl font-bold text-slate-900">Sign in to your account</h2>

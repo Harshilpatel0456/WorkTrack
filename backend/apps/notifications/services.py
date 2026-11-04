@@ -130,23 +130,25 @@ def create_event_notifications(
                 and frequency == NotificationPreference.Frequency.INSTANT
             ):
                 transaction.on_commit(
-                    lambda notification_id=str(notification.id): _enqueue_instant_email(notification_id)
+                    lambda notification_id=str(notification.id): enqueue_email_notifications([notification_id])
                 )
     return created_notifications
 
 
-def _enqueue_instant_email(notification_id):
+def enqueue_email_notifications(notification_ids):
     from apps.notifications.tasks import send_email_notifications
 
+    ids = [str(notification_id) for notification_id in notification_ids]
+    if not ids:
+        return
     try:
-        send_email_notifications.delay([notification_id])
+        send_email_notifications.delay(ids)
     except Exception:
         Notification.objects.filter(
-            id=notification_id,
+            id__in=ids,
             email_delivery_status=Notification.EmailDeliveryStatus.QUEUED,
         ).update(email_delivery_status=Notification.EmailDeliveryStatus.PENDING)
-        logger.exception('Could not enqueue notification email %s', notification_id)
-        raise
+        logger.exception('Could not enqueue notification emails %s; they remain pending.', ids)
 
 
 def notify_assignment_recipients(

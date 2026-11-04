@@ -6,7 +6,11 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from apps.notifications.models import Notification, NotificationPreference, PushDevice
-from apps.notifications.services import default_timezone_for_user, next_digest_time
+from apps.notifications.services import (
+    default_timezone_for_user,
+    enqueue_email_notifications,
+    next_digest_time,
+)
 from apps.notifications.serializers import (
     NotificationSerializer,
     NotificationPreferenceSerializer,
@@ -118,10 +122,8 @@ class NotificationPreferenceViewSet(viewsets.ModelViewSet):
                 )
                 notification_ids = list(pending.values_list('id', flat=True))
                 if notification_ids:
-                    from apps.notifications.tasks import send_email_notifications
-
                     transaction.on_commit(
-                        lambda ids=[str(item) for item in notification_ids]: send_email_notifications.delay(ids)
+                        lambda ids=[str(item) for item in notification_ids]: enqueue_email_notifications(ids)
                     )
             else:
                 pending.update(

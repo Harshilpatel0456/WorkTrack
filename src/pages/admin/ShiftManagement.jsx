@@ -19,6 +19,60 @@ const localDate = () => {
 };
 
 const timeValue = (value) => (value || '').slice(0, 5);
+const minutesOfDay = (value) => {
+  const [hours, minutes] = timeValue(value).split(':').map(Number);
+  return hours * 60 + minutes;
+};
+
+const dateInMinutes = (value) => {
+  const [year, month, day] = value.split('-').map(Number);
+  return Date.UTC(year, month - 1, day) / 60000;
+};
+
+const getScheduleConflict = ({ schedules, assignments, shifts, schedule, excludeId }) => {
+  const assignment = assignments.find((item) => item.id === schedule.assignmentId);
+  const shift = shifts.find((item) => item.id === schedule.shiftId);
+  if (!assignment || !shift || !schedule.shiftDate) return '';
+
+  const weekday = (new Date(`${schedule.shiftDate}T00:00:00Z`).getUTCDay() + 6) % 7;
+  if (!(shift.workingDays || []).includes(weekday)) {
+    return `${shift.name} does not run on the selected day. Choose another date or shift.`;
+  }
+
+  const start = dateInMinutes(schedule.shiftDate) + minutesOfDay(shift.startTime);
+  const duration = minutesOfDay(shift.endTime) - minutesOfDay(shift.startTime)
+    + (shift.isOvernight ? 1440 : 0);
+  const end = start + duration;
+
+  const conflictingSchedule = schedules.find((item) => {
+    if (
+      item.id === excludeId
+      || item.employeeId !== assignment.employeeId
+      || !['SCHEDULED', 'IN_PROGRESS'].includes(item.status)
+    ) return false;
+
+    const existingStart = dateInMinutes(item.shiftDate) + minutesOfDay(item.shiftStartTime);
+    const existingDuration = minutesOfDay(item.shiftEndTime) - minutesOfDay(item.shiftStartTime)
+      + (item.isOvernight ? 1440 : 0);
+    const existingEnd = existingStart + existingDuration;
+    return start < existingEnd && existingStart < end;
+  });
+
+  if (!conflictingSchedule) return '';
+  return `${assignment.employeeName} already has ${conflictingSchedule.shiftName} scheduled on ${conflictingSchedule.shiftDate} (${timeValue(conflictingSchedule.shiftStartTime)}–${timeValue(conflictingSchedule.shiftEndTime)}). Choose a different shift or date.`;
+};
+
+const findAvailableSchedule = ({ assignments, shifts, schedules, shiftDate }) => {
+  for (const assignment of assignments) {
+    for (const shift of shifts.filter((item) => item.is_active)) {
+      const candidate = { assignmentId: assignment.id, shiftId: shift.id, shiftDate };
+      if (!getScheduleConflict({ schedules, assignments, shifts, schedule: candidate })) {
+        return candidate;
+      }
+    }
+  }
+  return null;
+};
 
 export const ShiftManagement = () => {
   const [shifts, setShifts] = useState([]);
@@ -74,6 +128,13 @@ export const ShiftManagement = () => {
     && employeeById.get(assignment.employeeId)?.is_active !== false
     && customerById.get(assignment.customerId)?.accountStatus !== 'SUSPENDED'
   ));
+  const scheduleConflict = getScheduleConflict({
+    schedules,
+    assignments: activeAssignments,
+    shifts,
+    schedule: scheduleForm,
+    excludeId: editingSchedule?.id,
+  });
 
   const notifyAfter = async (message) => {
     if (await loadData()) setNotice(message);
@@ -120,6 +181,7 @@ export const ShiftManagement = () => {
 
   const saveSchedule = async (event) => {
     event.preventDefault();
+    if (scheduleConflict) return;
     setSaving(true);
     setError('');
     try {
@@ -203,10 +265,17 @@ export const ShiftManagement = () => {
 
   const openNewSchedule = () => {
     setEditingSchedule(null);
-    setScheduleForm({
+    const shiftDate = localDate();
+    const availableSchedule = findAvailableSchedule({
+      assignments: activeAssignments,
+      shifts,
+      schedules,
+      shiftDate,
+    });
+    setScheduleForm(availableSchedule || {
       assignmentId: activeAssignments[0]?.id || '',
       shiftId: shifts.find((shift) => shift.is_active)?.id || '',
-      shiftDate: localDate(),
+      shiftDate,
     });
     setError('');
     setScheduleModal(true);
@@ -394,9 +463,10 @@ export const ShiftManagement = () => {
           <label className="block font-bold text-slate-700">Shift date *
             <input type="date" required value={scheduleForm.shiftDate} onChange={(event) => setScheduleForm({ ...scheduleForm, shiftDate: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 font-normal" />
           </label>
+          {scheduleConflict && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{scheduleConflict}</p>}
           <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
             <button type="button" onClick={() => setScheduleModal(false)} className="px-4 py-2.5 text-slate-600 rounded-xl">Cancel</button>
-            <button disabled={saving || !activeAssignments.length || !shifts.some((shift) => shift.is_active)} className="px-5 py-2.5 rounded-xl bg-[#245CE2] font-bold text-white disabled:opacity-50">{saving ? 'Saving…' : editingSchedule ? 'Save Changes' : 'Schedule'}</button>
+            <button disabled={saving || !!scheduleConflict || !activeAssignments.length || !shifts.some((shift) => shift.is_active)} className="px-5 py-2.5 rounded-xl bg-[#245CE2] font-bold text-white disabled:opacity-50">{saving ? 'Saving…' : editingSchedule ? 'Save Changes' : 'Schedule'}</button>
           </div>
         </form>
       </Modal>

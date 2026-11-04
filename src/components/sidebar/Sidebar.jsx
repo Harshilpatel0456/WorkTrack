@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
+import { useNotifications } from '../../context/NotificationContext';
 import {
   LayoutDashboard,
   Users,
@@ -27,8 +28,9 @@ import {
 } from 'lucide-react';
 
 export const Sidebar = ({ isOpen, onClose }) => {
-  const { role, selectedEmployeeId, selectedCustomerId, logout } = useAuth();
-  const { notifications, isSidebarCollapsed, toggleSidebarCollapse } = useApp();
+  const { role, logout } = useAuth();
+  const { isSidebarCollapsed, toggleSidebarCollapse } = useApp();
+  const { unreadCount } = useNotifications();
   const [searchQuery, setSearchQuery] = useState('');
 
   // Role-specific nav links
@@ -41,7 +43,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
     { to: '/admin/attendance', label: 'Attendance', icon: UserCheck },
     { to: '/admin/reports', label: 'Daily Reports', icon: FileText },
     { to: '/admin/feedback', label: 'Feedback Monitoring', icon: MessageSquare },
-    { to: '/admin/notifications', label: 'Notifications', icon: Bell, badgeCount: notifications.filter(n => n.targetRole === 'admin' && !n.isRead).length },
+    { to: '/admin/notifications', label: 'Notifications', icon: Bell, badgeCount: unreadCount },
     { to: '/admin/settings', label: 'Settings', icon: Settings },
   ];
 
@@ -53,7 +55,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
     { to: '/employee/daily-report', label: 'Daily Report', icon: FileText },
     { to: '/employee/history', label: 'Report History', icon: History },
     { to: '/employee/feedback', label: 'Feedback', icon: MessageSquare },
-    { to: '/employee/notifications', label: 'Notifications', icon: Bell, badgeCount: notifications.filter(n => n.targetRole === 'employee' && n.targetEmployeeId === selectedEmployeeId && !n.isRead).length },
+    { to: '/employee/notifications', label: 'Notifications', icon: Bell, badgeCount: unreadCount },
     { to: '/employee/profile', label: 'Profile', icon: User },
   ];
 
@@ -64,7 +66,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
     { to: '/customer/reports', label: 'Daily Reports', icon: FileText },
     { to: '/customer/shift-reports', label: 'Shift-wise Reports', icon: Layers },
     { to: '/customer/feedback', label: 'Feedback & Comments', icon: MessageSquare },
-    { to: '/customer/notifications', label: 'Notifications', icon: Bell, badgeCount: notifications.filter(n => n.targetRole === 'customer' && n.targetCustomerId === selectedCustomerId && !n.isRead).length },
+    { to: '/customer/notifications', label: 'Notifications', icon: Bell, badgeCount: unreadCount },
     { to: '/customer/settings', label: 'Notification Settings', icon: Sliders },
     { to: '/customer/profile', label: 'Profile', icon: Building2 },
   ];

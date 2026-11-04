@@ -127,6 +127,35 @@ def test_successful_report_submission_creates_notifications_only_once(notificati
 
 
 @pytest.mark.django_db
+def test_report_submission_succeeds_when_email_queue_is_unavailable(
+    notification_setup,
+    django_capture_on_commit_callbacks,
+):
+    client = APIClient()
+    client.force_authenticate(notification_setup['employee_user'])
+    payload = {
+        'shift_assignment': str(notification_setup['shift_assignment'].id),
+        'title': 'Shift report',
+        'work_summary': 'Work completed.',
+        'status': DailyReport.Status.SUBMITTED,
+    }
+
+    with patch(
+        'apps.notifications.tasks.send_email_notifications.delay',
+        side_effect=RuntimeError('Notification broker unavailable'),
+    ):
+        with django_capture_on_commit_callbacks(execute=True):
+            response = client.post('/api/v1/reports/', payload, format='json')
+
+    assert response.status_code == 201
+    assert Notification.objects.filter(
+        event_type=Notification.EventType.REPORT_SUBMITTED,
+        daily_report_id=response.data['id'],
+        email_delivery_status=Notification.EmailDeliveryStatus.PENDING,
+    ).count() == 3
+
+
+@pytest.mark.django_db
 def test_event_creation_is_idempotent(notification_setup):
     assignment = notification_setup['shift_assignment']
     arguments = {
