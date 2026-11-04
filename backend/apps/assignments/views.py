@@ -2,6 +2,8 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from apps.accounts.permissions import IsAdmin, IsAdminOrReadOnly
+from apps.notifications.models import Notification
+from apps.notifications.services import notify_contract_recipients
 from .models import EmployeeCustomerAssignment
 from .serializers import EmployeeCustomerAssignmentSerializer
 
@@ -58,13 +60,31 @@ class AssignmentViewSet(viewsets.ModelViewSet):
                 {'detail': 'This employee is already actively assigned to this customer.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        was_active = assignment.status == EmployeeCustomerAssignment.Status.ACTIVE
         assignment.status = EmployeeCustomerAssignment.Status.ACTIVE
         assignment.save()
+        if not was_active:
+            notify_contract_recipients(
+                assignment,
+                event_type=Notification.EventType.ASSIGNMENT_CHANGED,
+                source_key=f'employee-customer-assignment:{assignment.pk}:active:{assignment.updated_at.isoformat()}',
+                title='Employee assignment approved',
+                message=f'{assignment.employee.user.get_full_name()} was assigned to {assignment.customer.company_name}.',
+            )
         return Response({'id': str(assignment.id), 'status': assignment.status})
 
     @action(detail=True, methods=['post'], permission_classes=[IsAdmin])
     def revoke(self, request, pk=None):
         assignment = self.get_object()
+        was_active = assignment.status == EmployeeCustomerAssignment.Status.ACTIVE
         assignment.status = EmployeeCustomerAssignment.Status.REVOKED
         assignment.save()
+        if was_active:
+            notify_contract_recipients(
+                assignment,
+                event_type=Notification.EventType.ASSIGNMENT_CHANGED,
+                source_key=f'employee-customer-assignment:{assignment.pk}:revoked:{assignment.updated_at.isoformat()}',
+                title='Employee assignment revoked',
+                message=f'{assignment.employee.user.get_full_name()} is no longer assigned to {assignment.customer.company_name}.',
+            )
         return Response({'id': str(assignment.id), 'status': assignment.status})

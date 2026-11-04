@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { VersionHistoryModal } from '../../components/modals/VersionHistoryModal';
+import { adminApi } from '../../services/adminApi';
 import {
   FileText,
   Building2,
@@ -15,144 +16,187 @@ import {
   Send,
   Save,
   Trash2,
-  Plus,
   ShieldCheck,
   FileCheck,
 } from 'lucide-react';
 
 export const DailyReportForm = () => {
   const { user, selectedEmployeeId } = useAuth();
-  const { employees, assignments, customers, shifts, reports, submitDailyReport, updateDailyReport, showToast } = useApp();
+  const { showToast } = useApp();
+  const [schedules, setSchedules] = useState([]);
+  const [reports, setReports] = useState([]);
+  const [selectedShiftId, setSelectedShiftId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const today = new Date();
+  const todayDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const currentEmp = user?.employeeProfile || { id: selectedEmployeeId, user: { get_full_name: user?.name } };
 
-  const currentEmp = employees.find((e) => e.id === selectedEmployeeId) || employees[0];
-  const todayDateStr = new Date().toISOString().split('T')[0];
+  useEffect(() => {
+    let active = true;
+    Promise.all([adminApi.schedules.list(), adminApi.reports.list()])
+      .then(([scheduleRows, reportRows]) => {
+        if (!active) return;
+        const validSchedules = scheduleRows.filter((row) => row.status !== 'CANCELLED');
+        setSchedules(validSchedules);
+        setReports(reportRows);
+        setSelectedShiftId((current) => current || validSchedules.find((row) => row.shiftDate === todayDateStr)?.id || validSchedules[0]?.id || '');
+      })
+      .catch((requestError) => { if (active) setError(requestError.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [todayDateStr]);
 
-  // Approved assignment
-  const empAssignments = assignments.filter(
-    (a) => a.employeeId === currentEmp.id && a.status === 'Approved'
-  );
-  const primaryAssignment = empAssignments[0];
-  const primaryCustomer = customers.find(c => c.id === (primaryAssignment?.customerId || currentEmp.assignedCustomerIds?.[0])) || customers[0];
-  const primaryShift = shifts.find(s => s.id === (primaryAssignment?.shiftId || currentEmp.currentShiftId)) || shifts[0];
-
-  // Check if today's report already exists for this employee + shift
-  const existingReport = reports.find(
-    (r) =>
-      r.employeeId === currentEmp.id &&
-      r.reportingDate === todayDateStr &&
-      r.customerId === primaryCustomer.id
-  );
+  const primaryAssignment = schedules.find((row) => row.id === selectedShiftId);
+  const primaryCustomer = {
+    id: primaryAssignment?.customerId,
+    companyName: primaryAssignment?.customerName || 'Assigned customer',
+  };
+  const primaryShift = {
+    id: primaryAssignment?.shiftId,
+    name: primaryAssignment?.shiftName || 'Assigned shift',
+    startTime: primaryAssignment?.shiftStartTime || '',
+    endTime: primaryAssignment?.shiftEndTime || '',
+  };
+  const existingReport = reports.find((report) => report.shift_assignment === primaryAssignment?.id);
 
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
 
   // Form Fields
   const [workCompleted, setWorkCompleted] = useState('');
+  const [title, setTitle] = useState('');
   const [pendingTasks, setPendingTasks] = useState('');
   const [issues, setIssues] = useState('');
   const [additionalRemarks, setAdditionalRemarks] = useState('');
   const [revisionSummary, setRevisionSummary] = useState('');
-  const [attachments, setAttachments] = useState([
-    { name: 'shift_activity_log.pdf', size: '1.2 MB' }
-  ]);
-  const [newFileName, setNewFileName] = useState('');
+  const [attachments, setAttachments] = useState([]);
+  const [newFiles, setNewFiles] = useState([]);
 
   // Pre-fill if editing existing report
   useEffect(() => {
     if (existingReport) {
+      setTitle(existingReport.title || '');
       setWorkCompleted(existingReport.workCompleted || '');
       setPendingTasks(existingReport.pendingTasks || '');
       setIssues(existingReport.issues || '');
       setAdditionalRemarks(existingReport.additionalRemarks || '');
       setAttachments(existingReport.attachments || []);
+      setNewFiles([]);
     } else {
+      setTitle(`Shift report - ${primaryShift.name}`);
       setWorkCompleted('');
       setPendingTasks('');
       setIssues('');
       setAdditionalRemarks('');
-      setAttachments([{ name: 'daily_shift_checklist.pdf', size: '820 KB' }]);
+      setAttachments([]);
+      setNewFiles([]);
     }
-  }, [existingReport?.id]);
+  }, [existingReport?.id, primaryAssignment?.id]);
 
-  const handleAddAttachment = () => {
-    if (!newFileName.trim()) return;
-    setAttachments(prev => [...prev, { name: newFileName.trim(), size: '1.4 MB' }]);
-    setNewFileName('');
+  const handleAddAttachment = (event) => {
+    const files = Array.from(event.target.files || []);
+    setNewFiles((previous) => [...previous, ...files]);
+    event.target.value = '';
   };
 
-  const handleRemoveAttachment = (idx) => {
-    setAttachments(prev => prev.filter((_, i) => i !== idx));
+  const handleRemoveAttachment = (idx) => setNewFiles((previous) => previous.filter((_, i) => i !== idx));
+
+  const uploadFiles = async (reportId) => {
+    for (const file of newFiles) await adminApi.reports.uploadAttachment(reportId, file);
+    setNewFiles([]);
   };
 
-  const handleSubmit = (e) => {
+  const formData = (status) => ({
+    shift_assignment: primaryAssignment.id,
+    title: title.trim(),
+    work_summary: workCompleted.trim(),
+    tasks_completed: '',
+    pending_tasks: pendingTasks,
+    issues_or_blockers: issues,
+    additional_remarks: additionalRemarks,
+    status,
+  });
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!workCompleted.trim()) {
-      showToast('Please specify the work completed during your shift', 'error');
+    if (!primaryAssignment) {
+      showToast('Select an assigned shift before submitting a report.', 'error');
+      return;
+    }
+    if (!title.trim() || !workCompleted.trim()) {
+      showToast('Report title and work summary are required.', 'error');
       return;
     }
 
-    if (existingReport) {
-      // Edit existing report -> creates a new revision version
-      const res = updateDailyReport(
-        existingReport.id,
-        {
-          workCompleted,
-          pendingTasks,
-          issues,
-          additionalRemarks,
-          attachments,
-        },
-        revisionSummary || `Revision ${existingReport.version + 1} updated by employee`
-      );
-      if (res.success) {
-        setRevisionSummary('');
+    setSaving(true);
+    setError('');
+    try {
+      let report;
+      if (existingReport) {
+        report = await adminApi.reports.update(existingReport.id, {
+          ...formData(existingReport.status),
+          change_summary: revisionSummary || `Revision ${existingReport.version + 1}`,
+        });
+        if (existingReport.status === 'DRAFT') report = await adminApi.reports.submit(report.id);
+      } else {
+        report = await adminApi.reports.create(formData('SUBMITTED'));
       }
-    } else {
-      // First time submission
-      submitDailyReport({
-        assignmentId: primaryAssignment?.id || 'asg-direct',
-        employeeId: currentEmp.id,
-        employeeName: currentEmp.name,
-        customerId: primaryCustomer.id,
-        customerName: primaryCustomer.companyName,
-        shiftId: primaryShift.id,
-        shiftName: `${primaryShift.name} (${primaryShift.startTime} – ${primaryShift.endTime})`,
-        reportingDate: todayDateStr,
-        workCompleted,
-        pendingTasks,
-        issues,
-        additionalRemarks,
-        attachments,
-        isDraft: false,
-      });
+      await uploadFiles(report.id);
+      const updatedReports = await adminApi.reports.list();
+      setReports(updatedReports);
+      setRevisionSummary('');
+      showToast('Daily report submitted successfully.');
+    } catch (requestError) {
+      setError(requestError.message);
+      showToast(requestError.message, 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleSaveDraft = () => {
-    if (!workCompleted.trim()) {
-      showToast('Please enter some text in work completed before saving draft', 'error');
+  const handleSaveDraft = async () => {
+    if (!primaryAssignment || !title.trim() || !workCompleted.trim()) {
+      showToast('Select an assigned shift and enter a title and work summary.', 'error');
       return;
     }
-    submitDailyReport({
-      assignmentId: primaryAssignment?.id || 'asg-direct',
-      employeeId: currentEmp.id,
-      employeeName: currentEmp.name,
-      customerId: primaryCustomer.id,
-      customerName: primaryCustomer.companyName,
-      shiftId: primaryShift.id,
-      shiftName: `${primaryShift.name} (${primaryShift.startTime} – ${primaryShift.endTime})`,
-      reportingDate: todayDateStr,
-      workCompleted,
-      pendingTasks,
-      issues,
-      additionalRemarks,
-      attachments,
-      isDraft: true,
-    });
+    setSaving(true);
+    try {
+      const report = existingReport
+        ? await adminApi.reports.update(existingReport.id, { ...formData('DRAFT'), change_summary: revisionSummary })
+        : await adminApi.reports.create(formData('DRAFT'));
+      await uploadFiles(report.id);
+      setReports(await adminApi.reports.list());
+      showToast('Draft saved.');
+    } catch (requestError) {
+      setError(requestError.message);
+      showToast(requestError.message, 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
+      {loading && <div role="status" className="rounded-xl bg-white p-4 text-xs text-slate-500">Loading assigned shifts and reports...</div>}
+      {error && <div role="alert" className="rounded-xl bg-rose-50 p-4 text-xs text-rose-700">{error}</div>}
+      {!loading && schedules.length > 0 && (
+        <label className="block rounded-xl border border-slate-200 bg-white p-4 text-xs">
+          <span className="mb-2 block font-bold text-slate-700">Assigned shift</span>
+          <select
+            value={selectedShiftId}
+            onChange={(event) => setSelectedShiftId(event.target.value)}
+            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+          >
+            {schedules.map((schedule) => (
+              <option key={schedule.id} value={schedule.id}>
+                {schedule.shiftDate} · {schedule.shiftName} · {schedule.customerName}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -249,7 +293,7 @@ export const DailyReportForm = () => {
             </label>
             <div className="font-bold text-slate-900 flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-[#245CE2]" />
-              {todayDateStr}
+              {primaryAssignment?.shiftDate || todayDateStr}
             </div>
             <span className="text-[10px] text-slate-400 block mt-0.5">Current Shift Date</span>
           </div>
@@ -338,10 +382,10 @@ export const DailyReportForm = () => {
           />
         </div>
 
-        {/* Field 5: Attachments Simulation */}
+        {/* Field 5: Attachments */}
         <div>
           <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-            5. File Attachments & Documentation (UI Simulation)
+            5. File Attachments & Documentation
           </label>
           <p className="text-[11px] text-slate-400 mb-2">
             Attach inspection sheets, telemetry logs, or diagnostic screenshots.
@@ -349,36 +393,29 @@ export const DailyReportForm = () => {
 
           <div className="flex gap-2 mb-3">
             <input
-              type="text"
-              placeholder="e.g. pressure_log_oct30.png or inspection_sheet.pdf"
-              value={newFileName}
-              onChange={(e) => setNewFileName(e.target.value)}
+              type="file"
+              multiple
+              onChange={handleAddAttachment}
               className="flex-1 px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#245CE2]"
             />
-            <button
-              type="button"
-              onClick={handleAddAttachment}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl flex items-center gap-1.5"
-            >
-              <Plus className="w-4 h-4" />
-              Attach File
-            </button>
           </div>
 
           <div className="flex flex-wrap gap-2">
             {attachments.map((file, idx) => (
               <div
-                key={idx}
+                key={file.id || idx}
                 className="bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 flex items-center gap-2 text-[11px]"
               >
                 <Paperclip className="w-3.5 h-3.5 text-[#245CE2]" />
                 <span className="font-semibold text-slate-800">{file.name}</span>
                 <span className="text-slate-400">({file.size || '1.0 MB'})</span>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveAttachment(idx)}
-                  className="text-slate-400 hover:text-rose-600 transition-colors ml-1"
-                >
+              </div>
+            ))}
+            {newFiles.map((file, idx) => (
+              <div key={`${file.name}-${idx}`} className="bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-200 flex items-center gap-2 text-[11px]">
+                <Paperclip className="w-3.5 h-3.5 text-[#245CE2]" />
+                <span className="font-semibold text-slate-800">{file.name}</span>
+                <button type="button" onClick={() => handleRemoveAttachment(idx)} aria-label={`Remove ${file.name}`} className="text-slate-400 hover:text-rose-600">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>

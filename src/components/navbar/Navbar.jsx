@@ -1,26 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { useApp } from '../../context/AppContext';
+import { useNotifications } from '../../context/NotificationContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { Bell, Search, Menu, LogOut, CheckCheck, Clock, ArrowRight, UserCheck } from 'lucide-react';
 
 export const Navbar = ({ onToggleSidebar, onToggleCollapse, isCollapsed, title }) => {
-  const { role, user, selectedEmployeeId, selectedCustomerId, logout } = useAuth();
-  const { notifications, markNotificationRead, markAllNotificationsRead } = useApp();
+  const { role, user, logout } = useAuth();
+  const { notifications, unreadCount, loading, error, refresh, markRead, markAllRead } = useNotifications();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
-
-  // Filter notifications relevant to current persona
-  const userNotifications = notifications.filter(n => {
-    if (role === 'admin') return n.targetRole === 'admin';
-    if (role === 'employee') return n.targetRole === 'employee' && (!n.targetEmployeeId || n.targetEmployeeId === selectedEmployeeId);
-    if (role === 'customer') return n.targetRole === 'customer' && (!n.targetCustomerId || n.targetCustomerId === selectedCustomerId);
-    return true;
-  });
-
-  const unreadCount = userNotifications.filter(n => !n.isRead).length;
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -34,11 +24,8 @@ export const Navbar = ({ onToggleSidebar, onToggleCollapse, isCollapsed, title }
   }, []);
 
   const handleNotificationClick = (notif) => {
-    markNotificationRead(notif.id);
+    if (!notif.read_at) markRead(notif.id);
     setShowNotifications(false);
-    if (notif.link) {
-      navigate(notif.link);
-    }
   };
 
   const getRoleBadge = () => {
@@ -96,7 +83,11 @@ export const Navbar = ({ onToggleSidebar, onToggleCollapse, isCollapsed, title }
           {/* Notifications Dropdown */}
           <div className="relative">
             <button
-              onClick={() => setShowNotifications(!showNotifications)}
+              onClick={() => {
+                const nextVisible = !showNotifications;
+                setShowNotifications(nextVisible);
+                if (nextVisible) refresh();
+              }}
               className="relative p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
               title="Notifications"
             >
@@ -122,7 +113,7 @@ export const Navbar = ({ onToggleSidebar, onToggleCollapse, isCollapsed, title }
                   </div>
                   {unreadCount > 0 && (
                     <button
-                      onClick={() => markAllNotificationsRead(role, role === 'employee' ? selectedEmployeeId : selectedCustomerId)}
+                      onClick={markAllRead}
                       className="text-xs text-[#245CE2] hover:underline flex items-center gap-1 font-medium"
                     >
                       <CheckCheck className="w-3.5 h-3.5" />
@@ -132,21 +123,25 @@ export const Navbar = ({ onToggleSidebar, onToggleCollapse, isCollapsed, title }
                 </div>
 
                 <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
-                  {userNotifications.length === 0 ? (
+                  {loading ? (
+                    <div className="p-6 text-center text-slate-400 text-sm" role="status">Loading notifications…</div>
+                  ) : error ? (
+                    <div className="p-6 text-center text-rose-600 text-sm" role="alert">{error}</div>
+                  ) : notifications.length === 0 ? (
                     <div className="p-6 text-center text-slate-400 text-sm">
                       No notifications available
                     </div>
                   ) : (
-                    userNotifications.slice(0, 5).map((notif) => (
+                    notifications.slice(0, 5).map((notif) => (
                       <div
                         key={notif.id}
                         onClick={() => handleNotificationClick(notif)}
                         className={`p-3.5 hover:bg-slate-50 transition-colors cursor-pointer flex gap-3 items-start ${
-                          !notif.isRead ? 'bg-blue-50/40' : ''
+                          !notif.read_at ? 'bg-blue-50/40' : ''
                         }`}
                       >
                         <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
-                          !notif.isRead ? 'bg-[#245CE2]' : 'bg-transparent'
+                          !notif.read_at ? 'bg-[#245CE2]' : 'bg-transparent'
                         }`} />
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-bold text-slate-800 line-clamp-1">
@@ -157,7 +152,7 @@ export const Navbar = ({ onToggleSidebar, onToggleCollapse, isCollapsed, title }
                           </p>
                           <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-1">
                             <Clock className="w-3 h-3" />
-                            <span>{new Date(notif.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span>{new Date(notif.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                           </div>
                         </div>
                       </div>

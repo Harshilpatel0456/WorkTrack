@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { StatCard } from '../../components/common/StatCard';
 import { Badge } from '../../components/common/Badge';
 import { ReportDetailModal } from '../../components/modals/ReportDetailModal';
 import { VersionHistoryModal } from '../../components/modals/VersionHistoryModal';
+import { adminApi } from '../../services/adminApi';
 import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
@@ -21,13 +22,28 @@ import {
   FileCheck,
 } from 'lucide-react';
 
+const localDate = () => {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+
+const formatTime = (value) => value
+  ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  : '--';
+
 export const EmployeeOverview = () => {
   const { user, selectedEmployeeId } = useAuth();
-  const { employees, assignments, attendance, reports, shifts, checkInEmployee, checkOutEmployee } = useApp();
+  const { employees, assignments, shifts, showToast } = useApp();
   const navigate = useNavigate();
 
   const [selectedReport, setSelectedReport] = useState(null);
   const [historyReport, setHistoryReport] = useState(null);
+  const [myShiftRows, setMyShiftRows] = useState([]);
+  const [myAttendance, setMyAttendance] = useState([]);
+  const [attendanceError, setAttendanceError] = useState('');
+  const [punching, setPunching] = useState(false);
+  const [reports, setReports] = useState([]);
+  const [reportError, setReportError] = useState('');
 
   const activeEmp = employees.find((e) => e.id === selectedEmployeeId) || employees[0];
 
@@ -39,28 +55,59 @@ export const EmployeeOverview = () => {
   const primaryShift = shifts.find((s) => s.id === (primaryAssignment ? primaryAssignment.shiftId : activeEmp.currentShiftId)) || shifts[0];
 
   // Today's attendance record
-  const todayDateStr = new Date().toISOString().split('T')[0];
-  const todayAttendance = attendance.find(
-    (a) => a.employeeId === activeEmp.id && a.date === todayDateStr
-  );
+  const todayDateStr = localDate();
+  const todayShift = myShiftRows.find((row) => row.shift_date === todayDateStr) || myShiftRows[0];
+  const todayAttendance = todayShift?.attendance;
+  const todayAttendanceStatus = todayShift?.attendance_status || 'SCHEDULED';
+
+  const loadAttendance = useCallback(async () => {
+    try {
+      const [shiftRows, records] = await Promise.all([
+        adminApi.attendance.myShifts(todayDateStr),
+        adminApi.attendance.myAttendance(),
+      ]);
+      setMyShiftRows(shiftRows);
+      setMyAttendance(records);
+      setAttendanceError('');
+    } catch (error) {
+      setAttendanceError(error.message);
+    }
+  }, []);
+
+  useEffect(() => { loadAttendance(); }, [loadAttendance]);
+
+  useEffect(() => {
+    let active = true;
+    adminApi.reports.list()
+      .then((rows) => { if (active) setReports(rows); })
+      .catch((error) => { if (active) setReportError(error.message); });
+    return () => { active = false; };
+  }, []);
 
   // Today's daily report
   const todayReport = reports.find(
-    (r) => r.employeeId === activeEmp.id && r.reportingDate === todayDateStr
+    (r) => r.reportingDate === todayDateStr
   );
 
   // My past reports
-  const myReports = reports.filter((r) => r.employeeId === activeEmp.id);
+  const myReports = reports;
 
-  // My past attendance
-  const myAttendance = attendance.filter((a) => a.employeeId === activeEmp.id);
-
-  const handleCheckIn = () => {
-    checkInEmployee(activeEmp.id);
-  };
-
-  const handleCheckOut = () => {
-    checkOutEmployee(activeEmp.id);
+  const handlePunch = async (action) => {
+    if (!todayShift) {
+      showToast('No assigned shift is available for attendance.', 'error');
+      return;
+    }
+    setPunching(true);
+    try {
+      if (action === 'in') await adminApi.attendance.checkIn(todayShift.shift_assignment_id);
+      else await adminApi.attendance.checkOut(todayShift.shift_assignment_id);
+      showToast(`Shift ${action === 'in' ? 'check-in' : 'check-out'} recorded`);
+      await loadAttendance();
+    } catch (error) {
+      showToast(error.message, 'error');
+    } finally {
+      setPunching(false);
+    }
   };
 
   return (
@@ -108,27 +155,28 @@ export const EmployeeOverview = () => {
             <div>
               <div className="flex items-center justify-between text-xs mb-2">
                 <span className="text-slate-300 font-semibold">Today's Attendance</span>
-                <Badge status={todayAttendance ? todayAttendance.status : 'Scheduled'} />
+                <Badge status={todayAttendanceStatus} />
               </div>
               <p className="text-[11px] text-slate-300">
-                {todayAttendance?.checkInTime
-                  ? `Checked In: ${todayAttendance.checkInTime} ${todayAttendance.checkOutTime ? `• Out: ${todayAttendance.checkOutTime}` : ''}`
-                  : 'Shift ready. Record your check-in timestamp.'}
+                {todayAttendance?.check_in
+                  ? `Checked in: ${formatTime(todayAttendance.check_in)}${todayAttendance.check_out ? ` • Out: ${formatTime(todayAttendance.check_out)}` : ''}`
+                  : todayShift ? `${todayShift.shift_details.customerName} · ${todayShift.shift_details.shiftName}` : 'No shift assigned today.'}
               </p>
+              {attendanceError && <p role="alert" className="mt-2 text-[11px] text-rose-200">{attendanceError}</p>}
             </div>
 
             <div className="flex gap-2">
               <button
-                onClick={handleCheckIn}
-                disabled={todayAttendance?.status === 'Checked In' || todayAttendance?.status === 'Checked Out'}
+                onClick={() => handlePunch('in')}
+                disabled={!todayShift || Boolean(todayAttendance?.check_in) || todayAttendanceStatus === 'ABSENT' || punching}
                 className="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 Check In
               </button>
               <button
-                onClick={handleCheckOut}
-                disabled={!todayAttendance || todayAttendance.status !== 'Checked In'}
+                onClick={() => handlePunch('out')}
+                disabled={!todayAttendance?.check_in || Boolean(todayAttendance?.check_out) || punching}
                 className="flex-1 py-2.5 px-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:hover:bg-rose-600 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5"
               >
                 <Clock className="w-3.5 h-3.5" />
@@ -150,10 +198,10 @@ export const EmployeeOverview = () => {
         />
         <StatCard
           title="Attendance Punch"
-          value={todayAttendance ? todayAttendance.status : 'Scheduled'}
-          subtitle={todayAttendance?.checkInTime ? `At ${todayAttendance.checkInTime}` : 'Not checked in'}
+          value={todayAttendanceStatus}
+          subtitle={todayAttendance?.check_in ? `At ${formatTime(todayAttendance.check_in)}` : 'Not checked in'}
           icon={UserCheck}
-          color={todayAttendance?.status === 'Checked In' ? 'emerald' : 'blue'}
+          color={todayAttendanceStatus === 'PRESENT' || todayAttendanceStatus === 'LATE' ? 'emerald' : 'blue'}
         />
         <StatCard
           title="Daily Report Status"
@@ -208,6 +256,7 @@ export const EmployeeOverview = () => {
       </div>
 
       {/* Two Column Section: Recent Reports & Weekly Attendance */}
+      {reportError && <div role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{reportError}</div>}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Reports */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-subtle">
@@ -273,22 +322,24 @@ export const EmployeeOverview = () => {
           </div>
 
           <div className="divide-y divide-slate-100">
+            {attendanceError && <p role="alert" className="py-2 text-xs text-rose-600">{attendanceError}</p>}
             {myAttendance.slice(0, 4).map((att) => (
               <div key={att.id} className="py-2.5 flex items-center justify-between text-xs">
                 <div>
-                  <span className="font-bold text-slate-800 block">{att.date} • {att.shiftName}</span>
+                  <span className="font-bold text-slate-800 block">{att.shift_date} • {att.shift_name}</span>
                   <span className="text-[11px] text-slate-400">
-                    {att.customerName}
+                    {att.customer_name}
                   </span>
                 </div>
                 <div className="text-right">
-                  <Badge status={att.status} />
+                  <Badge status={att.attendance_status} />
                   <p className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                    {att.checkInTime ? `${att.checkInTime} – ${att.checkOutTime || 'Present'}` : 'Scheduled'}
+                    {att.check_in ? `${formatTime(att.check_in)} – ${att.check_out ? formatTime(att.check_out) : 'Open'}` : 'Absent'}
                   </p>
                 </div>
               </div>
             ))}
+            {!attendanceError && myAttendance.length === 0 && <p className="py-4 text-xs text-slate-400">No attendance records yet.</p>}
           </div>
         </div>
       </div>

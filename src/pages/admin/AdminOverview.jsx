@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { StatCard } from '../../components/common/StatCard';
 import { Badge } from '../../components/common/Badge';
 import { ReportDetailModal } from '../../components/modals/ReportDetailModal';
 import { VersionHistoryModal } from '../../components/modals/VersionHistoryModal';
+import { adminApi } from '../../services/adminApi';
 import { useNavigate } from 'react-router-dom';
 import {
   Users,
@@ -33,34 +34,76 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
+const dateString = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
 export const AdminOverview = () => {
-  const { employees, customers, assignments, reports, attendance, shifts } = useApp();
+  const { employees, customers, assignments, shifts } = useApp();
   const navigate = useNavigate();
 
   const [selectedReport, setSelectedReport] = useState(null);
   const [historyReport, setHistoryReport] = useState(null);
+  const [attendance, setAttendance] = useState([]);
+  const [attendanceSummary, setAttendanceSummary] = useState(null);
+  const [attendanceError, setAttendanceError] = useState('');
+  const [reports, setReports] = useState([]);
+  const [reportSummary, setReportSummary] = useState(null);
+  const [reportError, setReportError] = useState('');
 
   // Compute live KPIs
   const totalEmployees = employees.length;
   const totalCustomers = customers.length;
   const activeAssignments = assignments.filter(a => a.status === 'Approved').length;
-  const todayDateStr = new Date().toISOString().split('T')[0];
-  const reportsToday = reports.filter(r => r.reportingDate === todayDateStr).length;
-  
-  const checkedInToday = attendance.filter(a => a.date === todayDateStr && (a.status === 'Checked In' || a.status === 'Checked Out')).length;
-  const attendanceRate = totalEmployees > 0 ? Math.round((checkedInToday / totalEmployees) * 100) : 0;
-  const pendingReportsCount = Math.max(0, activeAssignments - reportsToday);
+  const todayDateStr = dateString(new Date());
+  const reportsToday = reportSummary?.daily?.total || 0;
+  const presentToday = attendanceSummary?.daily?.statuses?.PRESENT || 0;
+  const lateToday = attendanceSummary?.daily?.statuses?.LATE || 0;
+  const attendanceCount = attendanceSummary?.daily?.total || 0;
+  const attendanceRate = attendanceCount
+    ? Math.round(((presentToday + lateToday) / attendanceCount) * 100)
+    : 0;
+  const pendingReportsCount = reportSummary?.daily?.pending || 0;
 
-  // Weekly attendance trend dummy dataset for charts
-  const weeklyAttendanceData = [
-    { day: 'Mon', rate: 92, onTime: 88 },
-    { day: 'Tue', rate: 95, onTime: 91 },
-    { day: 'Wed', rate: 89, onTime: 86 },
-    { day: 'Thu', rate: 96, onTime: 94 },
-    { day: 'Fri', rate: 94, onTime: 90 },
-    { day: 'Sat', rate: 84, onTime: 81 },
-    { day: 'Sun (Today)', rate: attendanceRate || 91, onTime: attendanceRate ? Math.max(70, attendanceRate - 5) : 88 },
-  ];
+  useEffect(() => {
+    const today = new Date();
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - 6);
+    Promise.all([
+      adminApi.attendance.list({ date_from: dateString(weekStart), date_to: dateString(today) }),
+      adminApi.attendance.summary({ date: dateString(today) }),
+    ]).then(([records, summary]) => {
+      setAttendance(records);
+      setAttendanceSummary(summary);
+      setAttendanceError('');
+    }).catch((error) => setAttendanceError(error.message));
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([adminApi.reports.list(), adminApi.reports.summary({ date: todayDateStr })])
+      .then(([rows, summary]) => {
+        if (active) {
+          setReports(rows);
+          setReportSummary(summary);
+          setReportError('');
+        }
+      })
+      .catch((error) => { if (active) setReportError(error.message); });
+    return () => { active = false; };
+  }, [todayDateStr]);
+
+  const weeklyAttendanceData = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (6 - index));
+    const dayRecords = attendance.filter((record) => record.shift_date === dateString(date));
+    const present = dayRecords.filter((record) => record.attendance_status === 'PRESENT').length;
+    const late = dayRecords.filter((record) => record.attendance_status === 'LATE').length;
+    const rate = dayRecords.length ? Math.round(((present + late) / dayRecords.length) * 100) : 0;
+    return {
+      day: date.toLocaleDateString([], { weekday: 'short' }),
+      rate,
+      onTime: dayRecords.length ? Math.round((present / dayRecords.length) * 100) : 0,
+    };
+  });
 
   // Shift-wise employee distribution
   const shiftColors = ['#245CE2', '#F59E0B', '#6366F1'];
@@ -110,6 +153,7 @@ export const AdminOverview = () => {
       </div>
 
       {/* KPI Cards Grid */}
+      {reportError && <div role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{reportError}</div>}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <StatCard
           title="Total Employees"
@@ -150,10 +194,8 @@ export const AdminOverview = () => {
         <StatCard
           title="Attendance Rate"
           value={`${attendanceRate}%`}
-          subtitle="Punch-in adherence"
+          subtitle={`${presentToday + lateToday} of ${attendanceCount} records`}
           icon={UserCheck}
-          change="+4.2%"
-          trend="up"
           color="emerald"
         />
         <StatCard
@@ -327,27 +369,29 @@ export const AdminOverview = () => {
             </button>
           </div>
 
+          {attendanceError && <p role="alert" className="mb-3 rounded-lg bg-rose-50 p-2 text-xs text-rose-700">{attendanceError}</p>}
           <div className="divide-y divide-slate-100">
             {attendance.slice(0, 5).map((att) => (
               <div key={att.id} className="py-2.5 flex items-center justify-between gap-3 hover:bg-slate-50 px-2 rounded-xl transition-colors">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold text-xs text-slate-700">
-                    {att.employeeName.charAt(0)}
+                    {(att.employee_name || '?').charAt(0)}
                   </div>
                   <div className="min-w-0 truncate">
-                    <p className="text-xs font-bold text-slate-800 truncate">{att.employeeName}</p>
-                    <p className="text-[11px] text-slate-400 truncate">{att.customerName} • {att.shiftName}</p>
+                    <p className="text-xs font-bold text-slate-800 truncate">{att.employee_name}</p>
+                    <p className="text-[11px] text-slate-400 truncate">{att.customer_name} • {att.shift_name}</p>
                   </div>
                 </div>
 
                 <div className="text-right flex-shrink-0">
-                  <Badge status={att.status} />
+                  <Badge status={att.attendance_status} />
                   <p className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                    {att.checkInTime ? `In: ${att.checkInTime}` : 'Not checked in'}
+                    {att.check_in ? `In: ${new Date(att.check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Not checked in'}
                   </p>
                 </div>
               </div>
             ))}
+            {!attendanceError && attendance.length === 0 && <p className="py-4 text-xs text-slate-400">No attendance records for this week.</p>}
           </div>
         </div>
       </div>

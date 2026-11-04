@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
-import { useAuth } from '../../context/AuthContext';
-import { useApp } from '../../context/AppContext';
+import React, { useEffect, useState } from 'react';
 import { Badge } from '../../components/common/Badge';
 import { ReportDetailModal } from '../../components/modals/ReportDetailModal';
 import { VersionHistoryModal } from '../../components/modals/VersionHistoryModal';
+import { adminApi } from '../../services/adminApi';
 import {
   Layers,
   Clock,
@@ -20,13 +19,37 @@ import {
 } from 'lucide-react';
 
 export const CustomerShiftReports = () => {
-  const { selectedCustomerId } = useAuth();
-  const { customers, reports, shifts, assignments } = useApp();
-
-  const currentCust = customers.find((c) => c.id === selectedCustomerId) || customers[0];
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [reports, setReports] = useState([]);
+  const [schedules, setSchedules] = useState([]);
+  const [shifts, setShifts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  });
   const [selectedReport, setSelectedReport] = useState(null);
   const [historyReport, setHistoryReport] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    Promise.all([
+      adminApi.reports.list({ date: selectedDate }),
+      adminApi.schedules.list({ shift_date: selectedDate }),
+      adminApi.shifts.list(),
+    ])
+      .then(([reportRows, scheduleRows, shiftRows]) => {
+        if (active) {
+          setReports(reportRows);
+          setSchedules(scheduleRows);
+          setShifts(shiftRows);
+        }
+      })
+      .catch((requestError) => { if (active) setError(requestError.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [selectedDate]);
 
   const getShiftIcon = (name) => {
     const n = name.toLowerCase();
@@ -61,20 +84,24 @@ export const CustomerShiftReports = () => {
         </div>
       </div>
 
+      {error && <div role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{error}</div>}
+      {loading && <div role="status" className="text-xs text-slate-500">Loading shift reports...</div>}
+
       {/* Three Columns: Morning, Afternoon, Night */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {shifts.map((shift) => {
+        {shifts.filter((shift) => schedules.some((schedule) => schedule.shiftId === shift.id)).map((shift) => {
           // Find report for this shift and selected date
           const report = reports.find(
             (r) =>
-              r.customerId === currentCust.id &&
               r.shiftId === shift.id &&
               r.reportingDate === selectedDate
           );
 
           // Find assigned staff for this shift
-          const assignedStaff = assignments.filter(
-            (a) => a.customerId === currentCust.id && a.shiftId === shift.id && a.status === 'Approved'
+          const assignedStaff = schedules.filter(
+            (schedule) => schedule.shiftId === shift.id
+              && schedule.shiftDate === selectedDate
+              && schedule.status !== 'CANCELLED'
           );
 
           return (

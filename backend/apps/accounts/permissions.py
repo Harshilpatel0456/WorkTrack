@@ -21,6 +21,22 @@ class IsEmployee(permissions.BasePermission):
         )
 
 
+class IsEmployeeOrAdmin(permissions.BasePermission):
+    """Allows employee-owned writes and administrator access."""
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(
+            user
+            and user.is_authenticated
+            and (
+                user.role == 'EMPLOYEE'
+                or user.role == 'ADMIN'
+                or user.is_staff
+                or user.is_superuser
+            )
+        )
+
+
 class IsCustomer(permissions.BasePermission):
     """Allows access only to users with the CUSTOMER role."""
     def has_permission(self, request, view):

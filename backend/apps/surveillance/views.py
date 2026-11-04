@@ -2,6 +2,7 @@ from django.utils import timezone
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from apps.accounts.permissions import IsAdmin, IsEmployeeOrAdmin
 from apps.surveillance.models import SurveillanceBatch, CameraSnapshot
 from apps.surveillance.serializers import (
     SurveillanceBatchSerializer,
@@ -15,6 +16,13 @@ class SurveillanceBatchViewSet(viewsets.ModelViewSet):
     filterset_fields = ['status', 'date', 'customer', 'employee']
     ordering_fields = ['date', 'hour24', 'created_at']
     ordering = ['-date', '-hour24']
+
+    def get_permissions(self):
+        if self.action == 'create':
+            return [permissions.IsAuthenticated(), IsAdmin()]
+        if self.action in ('update', 'partial_update', 'destroy', 'submit'):
+            return [permissions.IsAuthenticated(), IsEmployeeOrAdmin()]
+        return super().get_permissions()
 
     def get_queryset(self):
         user = self.request.user
@@ -65,6 +73,13 @@ class SurveillanceBatchViewSet(viewsets.ModelViewSet):
 class CameraSnapshotViewSet(viewsets.ModelViewSet):
     serializer_class = CameraSnapshotSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_permissions(self):
+        if self.action == 'create':
+            return [permissions.IsAuthenticated(), IsAdmin()]
+        if self.action in ('update', 'partial_update', 'destroy', 'verify'):
+            return [permissions.IsAuthenticated(), IsEmployeeOrAdmin()]
+        return super().get_permissions()
 
     def get_queryset(self):
         user = self.request.user

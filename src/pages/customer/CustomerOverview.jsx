@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { useApp } from '../../context/AppContext';
 import { StatCard } from '../../components/common/StatCard';
 import { Badge } from '../../components/common/Badge';
 import { ReportDetailModal } from '../../components/modals/ReportDetailModal';
 import { VersionHistoryModal } from '../../components/modals/VersionHistoryModal';
+import { adminApi } from '../../services/adminApi';
 import { useNavigate } from 'react-router-dom';
 import {
   Building2,
@@ -19,46 +19,111 @@ import {
   Paperclip,
   CheckCircle2,
   AlertCircle,
+  UserCheck,
 } from 'lucide-react';
 
-export const CustomerOverview = () => {
-  const { selectedCustomerId } = useAuth();
-  const { customers, assignments, reports, attendance, shifts } = useApp();
-  const navigate = useNavigate();
+const localDate = () => {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+const localDateFor = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
-  const currentCust = customers.find((c) => c.id === selectedCustomerId) || customers[0];
+export const CustomerOverview = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [currentCust, setCurrentCust] = useState(user?.customerProfile || null);
+  const [customerAssignments, setCustomerAssignments] = useState([]);
+  const [schedules, setSchedules] = useState([]);
+  const [shifts, setShifts] = useState([]);
 
   const [selectedReport, setSelectedReport] = useState(null);
   const [historyReport, setHistoryReport] = useState(null);
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [attendanceSummary, setAttendanceSummary] = useState(null);
+  const [attendanceError, setAttendanceError] = useState('');
+  const [reports, setReports] = useState([]);
+  const [reportSummary, setReportSummary] = useState(null);
+  const [totalComments, setTotalComments] = useState(0);
+  const [unresolvedComments, setUnresolvedComments] = useState(0);
+  const [attendanceWeek, setAttendanceWeek] = useState([]);
+  const [reportError, setReportError] = useState('');
 
-  const todayDateStr = new Date().toISOString().split('T')[0];
+  const todayDateStr = localDate();
 
-  // Active assignments for this customer
-  const customerAssignments = assignments.filter(
-    (a) => a.customerId === currentCust.id && a.status === 'Approved'
-  );
+  useEffect(() => {
+    let active = true;
+    const from = new Date();
+    from.setDate(from.getDate() - 6);
+    Promise.all([
+      adminApi.customers.me(),
+      adminApi.assignments.list(),
+      adminApi.schedules.list(),
+      adminApi.shifts.list(),
+      adminApi.attendance.customerShifts(todayDateStr),
+      adminApi.attendance.summary({ date: todayDateStr }),
+      adminApi.attendance.list({ date_from: localDateFor(from), date_to: todayDateStr }),
+    ]).then(([customer, assignmentRows, scheduleRows, shiftRows, records, summary, week]) => {
+      if (!active) return;
+      setCurrentCust(customer);
+      setCustomerAssignments(assignmentRows);
+      setSchedules(scheduleRows);
+      setShifts(shiftRows);
+      setAttendanceRecords(records);
+      setAttendanceSummary(summary);
+      setAttendanceWeek(week);
+      setAttendanceError('');
+    }).catch((error) => {
+      if (active) setAttendanceError(error.message);
+    });
+    return () => { active = false; };
+  }, [todayDateStr]);
 
-  // Reports associated with this customer
-  const customerReports = reports.filter((r) => r.customerId === currentCust.id);
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      adminApi.reports.list(),
+      adminApi.reports.summary({ date: todayDateStr }),
+      adminApi.reports.allComments(),
+    ]).then(([rows, summary, comments]) => {
+      if (!active) return;
+      setReports(rows);
+      setReportSummary(summary);
+      setTotalComments(comments.length);
+      setUnresolvedComments(comments.filter((comment) => !comment.replies?.length).length);
+      setReportError('');
+    }).catch((error) => {
+      if (active) setReportError(error.message);
+    });
+    return () => { active = false; };
+  }, [todayDateStr]);
+
+  // Customer-scoped APIs return only this account's data.
+  const customerReports = reports;
   const reportsToday = customerReports.filter((r) => r.reportingDate === todayDateStr);
 
-  // Active shifts count covering this customer
-  const activeShiftIds = [...new Set(customerAssignments.map((a) => a.shiftId))];
-
-  // Comments / Pending feedback
-  const totalComments = customerReports.reduce(
-    (acc, r) => acc + (r.comments ? r.comments.length : 0),
-    0
+  const activeAssignments = customerAssignments.filter((assignment) => assignment.status === 'ACTIVE');
+  const todaysSchedules = schedules.filter(
+    (schedule) => schedule.shiftDate === todayDateStr && schedule.status !== 'CANCELLED'
   );
+  const activeShiftIds = [...new Set(todaysSchedules.map((schedule) => schedule.shiftId))];
 
-  // Shift-wise activity breakdown (Morning, Afternoon, Night)
-  const shiftActivity = shifts.map((shift) => {
-    const assignedStaff = customerAssignments.filter((a) => a.shiftId === shift.id);
+  const completedComments = totalComments - unresolvedComments;
+  const attendanceTrend = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (6 - index));
+    const key = localDateFor(date);
+    const day = attendanceWeek.filter((record) => record.shift_date === key);
+    const attended = day.filter((record) => ['PRESENT', 'LATE'].includes(record.attendance_status)).length;
+    return { day: date.toLocaleDateString([], { weekday: 'short' }), percent: day.length ? Math.round((attended / day.length) * 100) : 0 };
+  });
+
+  const shiftActivity = shifts.filter((shift) => activeShiftIds.includes(shift.id)).map((shift) => {
+    const assignedStaff = todaysSchedules.filter((schedule) => schedule.shiftId === shift.id);
     const shiftReport = customerReports.find(
       (r) => r.shiftId === shift.id && r.reportingDate === todayDateStr
     );
-    const shiftAttendance = attendance.find(
-      (att) => att.customerId === currentCust.id && att.shiftId === shift.id && att.date === todayDateStr
+    const shiftAttendance = attendanceRecords.find(
+      (att) => att.shift_id === shift.id
     );
 
     return {
@@ -68,6 +133,10 @@ export const CustomerOverview = () => {
       shiftAttendance,
     };
   });
+
+  if (!currentCust) {
+    return <div role="status" className="p-6 text-sm text-slate-500">{reportError || attendanceError || 'Loading your customer portal...'}</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -110,10 +179,11 @@ export const CustomerOverview = () => {
       </div>
 
       {/* KPI Cards */}
+      {reportError && <div role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{reportError}</div>}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Assigned Personnel"
-          value={customerAssignments.length}
+          value={activeAssignments.length}
           subtitle="On-site staff allocated"
           icon={Users}
           color="blue"
@@ -134,12 +204,76 @@ export const CustomerOverview = () => {
         />
         <StatCard
           title="Total Feedback Notes"
-          value={totalComments}
-          subtitle="Comments & questions"
+          value={unresolvedComments}
+          subtitle={`${completedComments} replied`}
           icon={MessageSquare}
           color="amber"
         />
       </div>
+
+      {reportError && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-xs text-rose-700">{reportError}</p>}
+      {attendanceError && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-xs text-rose-700">{attendanceError}</p>}
+      {reportSummary && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-subtle">
+          <h3 className="mb-3 text-sm font-bold text-slate-900">Report submissions today</h3>
+          <div className="grid grid-cols-3 gap-3 text-xs">
+            <div className="rounded-xl bg-slate-50 p-3">Submitted <b>{reportSummary.daily.submitted}</b></div>
+            <div className="rounded-xl bg-slate-50 p-3">Pending <b>{reportSummary.daily.pending}</b></div>
+            <div className="rounded-xl bg-slate-50 p-3">Updated <b>{reportSummary.daily.updated}</b></div>
+          </div>
+        </section>
+      )}
+
+      <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-subtle">
+        <h3 className="mb-3 text-sm font-bold text-slate-900">7-day attendance trend</h3>
+        <div className="grid grid-cols-7 gap-2">
+          {attendanceTrend.map((day) => (
+            <div key={day.day} className="text-center">
+              <div className="flex h-16 items-end rounded-lg bg-slate-50 p-1">
+                <div title={`${day.percent}%`} className="w-full rounded bg-blue-500" style={{ height: `${Math.max(day.percent, 3)}%` }} />
+              </div>
+              <span className="mt-1 block text-[10px] text-slate-500">{day.day}</span>
+              <span className="text-[10px] font-semibold text-slate-700">{day.percent}%</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-subtle">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+              <UserCheck className="h-4 w-4 text-[#245CE2]" /> Today's workforce attendance
+            </h3>
+            <p className="mt-1 text-xs text-slate-500">Live records for your assigned employees · displayed in your local timezone.</p>
+          </div>
+          <span className="text-xs text-slate-500">
+            {attendanceSummary ? `${attendanceSummary.daily.total} records · ${attendanceSummary.daily.total_duration_hours} hours` : 'Loading attendance…'}
+          </span>
+        </div>
+        {attendanceError && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-xs text-rose-700">{attendanceError}</p>}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 text-[10px] font-bold uppercase text-slate-500">
+              <tr><th className="px-3 py-2.5">Employee</th><th className="px-3 py-2.5">Shift</th><th className="px-3 py-2.5">Check-in</th><th className="px-3 py-2.5">Check-out</th><th className="px-3 py-2.5">Hours</th><th className="px-3 py-2.5">Status</th></tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {attendanceRecords.length ? attendanceRecords.map((record) => (
+                <tr key={record.id}>
+                  <td className="px-3 py-3 font-semibold">{record.employee_name}</td>
+                  <td className="px-3 py-3">{record.shift_name}</td>
+                  <td className="px-3 py-3 font-mono text-emerald-700">{record.check_in ? new Date(record.check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'}</td>
+                  <td className="px-3 py-3 font-mono text-blue-700">{record.check_out ? new Date(record.check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'}</td>
+                  <td className="px-3 py-3 font-mono">{Number(record.duration_hours).toFixed(2)} h</td>
+                  <td className="px-3 py-3"><Badge status={record.attendance_status} /></td>
+                </tr>
+              )) : (
+                <tr><td colSpan="6" className="px-3 py-6 text-center text-slate-400">{attendanceError ? 'Attendance could not be loaded.' : 'No attendance records for today.'}</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       {/* Shift-Wise Real-Time Activity Cards */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-subtle space-y-4">

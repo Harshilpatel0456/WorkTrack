@@ -50,7 +50,7 @@ if DB_ENGINE == 'postgresql':
             'ENGINE': 'django.db.backends.postgresql',
             'NAME': config('DB_NAME', default='worktrack_db'),
             'USER': config('DB_USER', default='worktrack_user'),
-            'PASSWORD': config('DB_PASSWORD', default='worktrack_secure_pass_2026'),
+            'PASSWORD': config('DB_PASSWORD', default='worktrack_user' if DEBUG else None),
             'HOST': config('DB_HOST', default='127.0.0.1'),
             'PORT': config('DB_PORT', default='5432'),
         }
@@ -143,4 +143,3 @@ def process_hourly_digest():
    python manage.py migrate
    ```
 4. **Data Seeder:** Built-in management command `seed_demo_data` initializes the database with the three evaluation personas (`admin@worktrack.demo`, `employee@worktrack.demo`, `customer@worktrack.demo`), shift templates, contracts, and demo surveillance batches.
-

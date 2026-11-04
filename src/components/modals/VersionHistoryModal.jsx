@@ -1,26 +1,43 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal } from '../common/Modal';
-import { Clock, User, History, CheckCircle, FileText, ChevronRight } from 'lucide-react';
-import { Badge } from '../common/Badge';
+import { Clock, History } from 'lucide-react';
+import { adminApi } from '../../services/adminApi';
 
 export const VersionHistoryModal = ({ isOpen, onClose, report }) => {
+  const [versions, setVersions] = useState([]);
+  const [selectedVerNumber, setSelectedVerNumber] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !report?.id) return;
+    let active = true;
+    setLoading(true);
+    setError('');
+    adminApi.reports.versions(report.id).then((rows) => {
+      if (!active) return;
+      const history = rows.map((row) => ({
+        version: row.version_number,
+        timestamp: row.modified_at,
+        author: row.modified_by_name || 'WorkTrack user',
+        summary: row.change_summary,
+        title: row.title_snapshot,
+        workCompleted: row.content_snapshot?.work_summary,
+        pendingTasks: row.content_snapshot?.pending_tasks,
+        issues: row.content_snapshot?.issues_or_blockers,
+        additionalRemarks: row.content_snapshot?.additional_remarks,
+        tasksCompleted: row.content_snapshot?.tasks_completed,
+        previousContent: row.previous_content_snapshot,
+      }));
+      setVersions(history);
+      setSelectedVerNumber(history[0]?.version || null);
+    }).catch((requestError) => {
+      if (active) setError(requestError.message);
+    }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [isOpen, report?.id]);
+
   if (!report) return null;
-
-  const versions = report.versionHistory || [
-    {
-      version: report.version || 1,
-      timestamp: report.updatedAt || report.createdAt,
-      author: `${report.employeeName} (Author)`,
-      summary: 'Current version',
-      workCompleted: report.workCompleted,
-      pendingTasks: report.pendingTasks,
-      issues: report.issues,
-      additionalRemarks: report.additionalRemarks,
-    }
-  ];
-
-  // Selected version to view diff
-  const [selectedVerNumber, setSelectedVerNumber] = useState(versions[0]?.version || 1);
   const activeVer = versions.find(v => v.version === selectedVerNumber) || versions[0];
 
   return (
@@ -75,10 +92,13 @@ export const VersionHistoryModal = ({ isOpen, onClose, report }) => {
               );
             })}
           </div>
+          {loading && <p className="py-4 text-xs text-slate-400">Loading version history…</p>}
+          {error && <p role="alert" className="py-3 text-xs text-rose-600">{error}</p>}
+          {!loading && !error && !versions.length && <p className="py-4 text-xs text-slate-400">No version snapshots are available.</p>}
         </div>
 
         {/* Right Column: Version Details / Snapshot */}
-        <div className="md:col-span-2 space-y-4">
+        {activeVer && <div className="md:col-span-2 space-y-4">
           <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200/60">
             <div>
               <span className="text-xs font-bold text-slate-900">
@@ -94,6 +114,12 @@ export const VersionHistoryModal = ({ isOpen, onClose, report }) => {
           </div>
 
           <div className="space-y-4 text-xs">
+            {activeVer.title && (
+              <div>
+                <label className="mb-1 block font-bold uppercase tracking-wider text-slate-700">Report title</label>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-800">{activeVer.title}</div>
+              </div>
+            )}
             <div>
               <label className="font-bold text-slate-700 uppercase tracking-wider block mb-1">
                 Change Log / Revision Note
@@ -141,7 +167,7 @@ export const VersionHistoryModal = ({ isOpen, onClose, report }) => {
               </div>
             )}
           </div>
-        </div>
+        </div>}
       </div>
     </Modal>
   );

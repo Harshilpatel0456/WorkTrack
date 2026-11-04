@@ -1,4 +1,5 @@
 import uuid
+import logging
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import get_user_model
@@ -13,6 +14,7 @@ from apps.employees.models import EmployeeProfile
 from apps.customers.models import CustomerProfile
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -202,8 +204,6 @@ class PasswordResetRequestSerializer(serializers.Serializer):
                 f"Hello {user.get_full_name()},\n\n"
                 f"You requested a password reset for your WorkTrack account.\n"
                 f"Please use the link below to set a new password:\n{reset_url}\n\n"
-                f"Reset Token: {token}\n"
-                f"User ID: {uid}\n\n"
                 f"If you did not make this request, you can safely ignore this email.\n\n"
                 f"— WorkTrack Security Team"
             )
@@ -213,10 +213,10 @@ class PasswordResetRequestSerializer(serializers.Serializer):
                     message,
                     settings.DEFAULT_FROM_EMAIL,
                     [user.email],
-                    fail_silently=True
+                    fail_silently=False
                 )
             except Exception:
-                pass
+                logger.exception('Could not send password reset email.')
 
 
 class PasswordResetConfirmSerializer(serializers.Serializer):

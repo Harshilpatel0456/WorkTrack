@@ -131,6 +131,7 @@ erDiagram
 | `name` | `CharField(100)` | Not Null | e.g. Morning Shift, Afternoon Shift, Night Shift |
 | `start_time` | `TimeField` | Not Null | Shift start (e.g. 06:00:00) |
 | `end_time` | `TimeField` | Not Null | Shift end (e.g. 14:00:00) |
+| `grace_period_minutes` | `PositiveSmallIntegerField` | Default=15, minimum=0 | Allowed lateness before marking a punch `LATE` |
 | `description` | `TextField` | Blank, Nullable | Shift responsibilities & instructions |
 | `is_overnight` | `BooleanField` | Default=False | True if shift crosses midnight |
 | `is_active` | `BooleanField` | Default=True | Template active flag |
@@ -169,7 +170,7 @@ erDiagram
 | `shift_assignment` | `OneToOneField(ShiftAssignment)` | `on_delete=CASCADE`, related_name='attendance_record' | Target shift |
 | `check_in` | `DateTimeField` | Nullable | Punch-in timestamp (UTC) |
 | `check_out` | `DateTimeField` | Nullable | Punch-out timestamp (UTC) |
-| `attendance_status` | `CharField(20)` | Choices: `PRESENT`, `LATE`, `ABSENT`, `HALF_DAY`, `OVERTIME` | Attendance adherence status |
+| `attendance_status` | `CharField(20)` | Choices: `PRESENT`, `ABSENT`, `LATE`, `INCOMPLETE` (legacy `HALF_DAY`, `OVERTIME`) | Attendance adherence status |
 | `duration_hours` | `DecimalField(5,2)` | Default=0.00 | Computed shift duration |
 | `notes` | `TextField` | Blank, Nullable | Employee punch remarks |
 | `location_verified` | `BooleanField` | Default=True | IP/Geo check confirmation |
@@ -178,6 +179,8 @@ erDiagram
 
 **Check Constraints:**
 - `CHECK (check_out IS NULL OR check_out >= check_in)` (Check-out cannot precede check-in).
+- `CHECK (duration_hours >= 0)`.
+- Index on `(attendance_status, check_in)` for status and punch queries.
 
 ---
 
@@ -213,12 +216,14 @@ erDiagram
 | `version_number` | `IntegerField` | Not Null | Version sequence (1, 2, 3...) |
 | `title_snapshot` | `CharField(255)` | Not Null | Title at this version |
 | `content_snapshot` | `JSONField` | Not Null | Complete JSON payload of all text fields |
+| `previous_content_snapshot` | `JSONField` | Nullable | Content before the corresponding edit |
 | `modified_by` | `ForeignKey(User)` | `on_delete=PROTECT` | User who made this revision |
 | `modified_at` | `DateTimeField` | `auto_now_add=True` | Timestamp of this revision |
 | `change_summary` | `TextField` | Blank | Author's notes on why revision was made |
 
 **Indexes & Constraints:**
 - `UNIQUE INDEX idx_report_version (daily_report, version_number)`
+- Index on `(daily_report, modified_at)` for history retrieval
 
 ---
 
@@ -337,4 +342,3 @@ erDiagram
 - `employee_verification` (VERIFIED_OK, FLAGGED_SUSPICIOUS, PENDING)
 - `employee_notes` (TextField)
 - `image` (ImageField, simulated CCTV frame)
-

@@ -1,236 +1,196 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../context/AuthContext';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Badge } from '../../components/common/Badge';
+import { adminApi } from '../../services/adminApi';
 import {
-  Clock,
-  UserCheck,
-  CheckCircle2,
   AlertCircle,
   Calendar,
-  Building2,
-  ShieldCheck,
-  Timer,
+  Clock,
   PlayCircle,
+  ShieldCheck,
   StopCircle,
+  Timer,
 } from 'lucide-react';
 
+const formatTime = (value) => value
+  ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  : '--:--';
+
+const localDate = () => {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+
+const formatDuration = (value) => value == null ? '--' : `${Number(value).toFixed(2)} h`;
+
 export const EmployeeAttendance = () => {
-  const { selectedEmployeeId } = useAuth();
-  const { employees, assignments, attendance, checkInEmployee, checkOutEmployee, shifts } = useApp();
-
-  const currentEmp = employees.find((e) => e.id === selectedEmployeeId) || employees[0];
-
-  // Current live clock state
+  const { showToast } = useApp();
+  const [shifts, setShifts] = useState([]);
+  const [history, setHistory] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [loading, setLoading] = useState(true);
+  const [busyShift, setBusyShift] = useState(null);
+  const [error, setError] = useState('');
 
+  const loadAttendance = useCallback(async () => {
+    setError('');
+    try {
+      const [todayShifts, records] = await Promise.all([
+        adminApi.attendance.myShifts(localDate()),
+        adminApi.attendance.myAttendance(),
+      ]);
+      setShifts(todayShifts);
+      setHistory(records);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadAttendance(); }, [loadAttendance]);
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  const todayDateStr = new Date().toISOString().split('T')[0];
-  const todayAttendance = attendance.find(
-    (a) => a.employeeId === currentEmp.id && a.date === todayDateStr
-  );
-
-  const myHistory = attendance.filter((a) => a.employeeId === currentEmp.id);
-
-  const empAssignments = assignments.filter(
-    (a) => a.employeeId === currentEmp.id && a.status === 'Approved'
-  );
-  const primaryAssignment = empAssignments[0];
-  const primaryShift = shifts.find((s) => s.id === (primaryAssignment ? primaryAssignment.shiftId : currentEmp.currentShiftId)) || shifts[0];
-
-  const handleCheckIn = () => {
-    checkInEmployee(currentEmp.id);
+  const punch = async (item, action) => {
+    setBusyShift(item.shift_assignment_id);
+    try {
+      if (action === 'in') await adminApi.attendance.checkIn(item.shift_assignment_id);
+      else await adminApi.attendance.checkOut(item.shift_assignment_id);
+      showToast(`Shift ${action === 'in' ? 'check-in' : 'check-out'} recorded`);
+      await loadAttendance();
+    } catch (requestError) {
+      showToast(requestError.message, 'error');
+    } finally {
+      setBusyShift(null);
+    }
   };
-
-  const handleCheckOut = () => {
-    checkOutEmployee(currentEmp.id);
-  };
-
-  const isCheckedIn = todayAttendance?.status === 'Checked In';
-  const isCheckedOut = todayAttendance?.status === 'Checked Out';
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
       <div>
-        <h2 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-          <Clock className="w-6 h-6 text-[#245CE2]" />
-          Shift Attendance & Biometric Punch Terminal
+        <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-900">
+          <Clock className="h-6 w-6 text-[#245CE2]" />
+          Shift Attendance &amp; Punch Terminal
         </h2>
-        <p className="text-xs text-slate-500 mt-1">
-          Record shifts on-duty and departure timestamps. Enforces attendance verification before check-out.
+        <p className="mt-1 text-xs text-slate-500">
+          Your assigned shifts and attendance records. Times are shown in your local timezone.
         </p>
       </div>
 
-      {/* Main Punch Clock Card */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 p-6 sm:p-8 shadow-card flex flex-col md:flex-row items-center justify-between gap-8">
-        {/* Left: Live digital clock display */}
-        <div className="flex flex-col items-center md:items-start text-center md:text-left">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-[#245CE2] text-xs font-bold mb-3">
-            <Timer className="w-3.5 h-3.5" />
-            Synchronized System Clock
+      <div className="flex flex-col items-center justify-between gap-5 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-card sm:flex-row sm:p-8">
+        <div className="text-center sm:text-left">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-bold text-[#245CE2]">
+            <Timer className="h-3.5 w-3.5" /> Local system time
           </div>
-
-          <div className="text-4xl sm:text-5xl font-black text-slate-900 font-mono tracking-tight">
-            {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+          <div className="font-mono text-4xl font-black tracking-tight text-slate-900">
+            {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </div>
-
-          <p className="text-xs text-slate-500 font-medium mt-2 flex items-center gap-1.5">
-            <Calendar className="w-4 h-4 text-slate-400" />
-            {currentTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          <p className="mt-2 flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500 sm:justify-start">
+            <Calendar className="h-4 w-4 text-slate-400" />
+            {currentTime.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </p>
-
-          <div className="mt-4 p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-600 flex items-center gap-4">
-            <div>
-              <span className="text-slate-400 text-[10px] uppercase font-bold block">Allocated Client</span>
-              <span className="font-bold text-slate-800">{primaryAssignment?.customerName || 'Acme Industries'}</span>
-            </div>
-            <div className="w-[1px] h-6 bg-slate-200"></div>
-            <div>
-              <span className="text-slate-400 text-[10px] uppercase font-bold block">Assigned Window</span>
-              <span className="font-bold text-[#245CE2]">{primaryShift.name}</span>
-            </div>
-          </div>
         </div>
-
-        {/* Right: Interactive Punch Controls */}
-        <div className="w-full md:w-96 bg-slate-50 p-6 rounded-2xl border border-slate-200/80 flex flex-col justify-between gap-5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Today's Punch Status
-            </span>
-            <Badge status={todayAttendance ? todayAttendance.status : 'Scheduled'} />
-          </div>
-
-          {/* Current Punch Summary */}
-          <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-1.5 text-xs">
-            <div className="flex justify-between">
-              <span className="text-slate-400">Check-In Recorded:</span>
-              <span className="font-bold font-mono text-emerald-700">
-                {todayAttendance?.checkInTime || '--:--'}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">Check-Out Recorded:</span>
-              <span className="font-bold font-mono text-blue-700">
-                {todayAttendance?.checkOutTime || '--:--'}
-              </span>
-            </div>
-            <div className="flex justify-between border-t border-slate-100 pt-1.5">
-              <span className="text-slate-400">Working Duration:</span>
-              <span className="font-bold font-mono text-slate-900">
-                {todayAttendance?.duration || '--'}
-              </span>
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={handleCheckIn}
-              disabled={isCheckedIn || isCheckedOut}
-              className={`py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md ${
-                isCheckedIn || isCheckedOut
-                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                  : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
-              }`}
-            >
-              <PlayCircle className="w-4 h-4" />
-              Check In
-            </button>
-
-            <button
-              onClick={handleCheckOut}
-              disabled={!isCheckedIn}
-              className={`py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md ${
-                !isCheckedIn
-                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                  : 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20'
-              }`}
-            >
-              <StopCircle className="w-4 h-4" />
-              Check Out
-            </button>
-          </div>
-
-          {/* Validation note */}
-          <div className="text-[11px] text-slate-400 text-center flex items-center justify-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
-            <span>Strict check-out validation enabled</span>
-          </div>
+        <div className="flex items-center gap-2 rounded-xl bg-slate-50 p-4 text-xs text-slate-600">
+          <ShieldCheck className="h-5 w-5 text-emerald-600" />
+          Punches are validated against assigned shift times.
         </div>
       </div>
 
-      {/* Attendance History Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-subtle overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="text-sm font-bold text-slate-900">Personal Shift Attendance History</h3>
-          <span className="text-xs text-slate-400 font-medium">
-            Showing records for {currentEmp.name}
-          </span>
+      {error && (
+        <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+          <AlertCircle className="h-4 w-4 shrink-0" /> {error}
+          <button onClick={loadAttendance} className="ml-auto font-bold underline">Retry</button>
         </div>
+      )}
 
+      <section className="space-y-3">
+        <h3 className="text-sm font-bold text-slate-900">Today's assigned shifts</h3>
+        {loading ? (
+          <div className="rounded-2xl bg-white p-8 text-center text-sm text-slate-400">Loading assigned shifts…</div>
+        ) : shifts.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-400">
+            No shifts are assigned for today.
+          </div>
+        ) : shifts.map((item) => {
+          const shift = item.shift_details;
+          const attendance = item.attendance;
+          const checkedIn = Boolean(attendance?.check_in && !attendance?.check_out);
+          const completed = Boolean(attendance?.check_out);
+          const locked = Boolean(attendance?.check_in || attendance?.check_out);
+          return (
+            <article key={item.shift_assignment_id} className="grid gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-subtle lg:grid-cols-[1fr_auto] lg:items-center">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h4 className="font-bold text-slate-900">{shift.shiftName}</h4>
+                  <Badge status={item.attendance_status} />
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  {shift.customerName} · {item.shift_date} · {shift.shiftStartTime}–{shift.shiftEndTime}
+                  {shift.isOvernight ? ' (overnight)' : ''}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs">
+                  <span className="text-slate-500">Check-in <strong className="ml-1 font-mono text-emerald-700">{formatTime(attendance?.check_in)}</strong></span>
+                  <span className="text-slate-500">Check-out <strong className="ml-1 font-mono text-blue-700">{formatTime(attendance?.check_out)}</strong></span>
+                  <span className="text-slate-500">Duration <strong className="ml-1 font-mono text-slate-900">{formatDuration(attendance?.duration_hours)}</strong></span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 lg:min-w-64">
+                <button
+                  onClick={() => punch(item, 'in')}
+                  disabled={locked || item.attendance_status === 'ABSENT' || busyShift === item.shift_assignment_id}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                >
+                  <PlayCircle className="h-4 w-4" /> Check in
+                </button>
+                <button
+                  onClick={() => punch(item, 'out')}
+                  disabled={!checkedIn || completed || busyShift === item.shift_assignment_id}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                >
+                  <StopCircle className="h-4 w-4" /> Check out
+                </button>
+              </div>
+            </article>
+          );
+        })}
+      </section>
+
+      <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-subtle">
+        <div className="border-b border-slate-100 px-5 py-4">
+          <h3 className="text-sm font-bold text-slate-900">Attendance history</h3>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-slate-50/75 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
-                <th className="py-3 px-4 sm:px-6">Date</th>
-                <th className="py-3 px-4">Client Enterprise</th>
-                <th className="py-3 px-4">Shift Name</th>
-                <th className="py-3 px-4">Check-In Time</th>
-                <th className="py-3 px-4">Check-Out Time</th>
-                <th className="py-3 px-4">Duration</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4">Notes</th>
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 text-[11px] uppercase text-slate-500">
+              <tr>
+                <th className="px-5 py-3">Shift date</th><th className="px-4 py-3">Customer</th>
+                <th className="px-4 py-3">Shift</th><th className="px-4 py-3">Check-in</th>
+                <th className="px-4 py-3">Check-out</th><th className="px-4 py-3">Duration</th>
+                <th className="px-4 py-3">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-              {myHistory.length === 0 ? (
-                <tr>
-                  <td colSpan="8" className="py-8 text-center text-slate-400">
-                    No attendance records logged yet.
-                  </td>
+            <tbody className="divide-y divide-slate-100">
+              {history.map((record) => (
+                <tr key={record.id}>
+                  <td className="px-5 py-3 font-mono">{record.shift_date}</td>
+                  <td className="px-4 py-3">{record.customer_name}</td>
+                  <td className="px-4 py-3">{record.shift_name}</td>
+                  <td className="px-4 py-3 font-mono text-emerald-700">{formatTime(record.check_in)}</td>
+                  <td className="px-4 py-3 font-mono text-blue-700">{formatTime(record.check_out)}</td>
+                  <td className="px-4 py-3 font-mono">{formatDuration(record.duration_hours)}</td>
+                  <td className="px-4 py-3"><Badge status={record.attendance_status} /></td>
                 </tr>
-              ) : (
-                myHistory.map((att) => (
-                  <tr key={att.id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-3 px-4 sm:px-6 font-mono font-bold text-slate-900">
-                      {att.date}
-                    </td>
-                    <td className="py-3 px-4 font-semibold text-slate-800">
-                      {att.customerName}
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded text-[11px]">
-                        {att.shiftName}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 font-mono text-emerald-700 font-semibold">
-                      {att.checkInTime || '--'}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-blue-700 font-semibold">
-                      {att.checkOutTime || '--'}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-slate-900 font-bold">
-                      {att.duration}
-                    </td>
-                    <td className="py-3 px-4">
-                      <Badge status={att.status} />
-                    </td>
-                    <td className="py-3 px-4 text-slate-500 max-w-xs truncate text-[11px]">
-                      {att.notes || '--'}
-                    </td>
-                  </tr>
-                ))
+              ))}
+              {!loading && history.length === 0 && (
+                <tr><td colSpan="7" className="px-5 py-8 text-center text-slate-400">No attendance records yet.</td></tr>
               )}
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
     </div>
   );
 };

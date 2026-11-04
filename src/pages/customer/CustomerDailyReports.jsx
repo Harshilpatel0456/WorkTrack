@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
-import { useAuth } from '../../context/AuthContext';
-import { useApp } from '../../context/AppContext';
+import React, { useEffect, useState } from 'react';
+import { adminApi } from '../../services/adminApi';
 import { Badge } from '../../components/common/Badge';
 import { ReportDetailModal } from '../../components/modals/ReportDetailModal';
 import { VersionHistoryModal } from '../../components/modals/VersionHistoryModal';
@@ -19,10 +18,14 @@ import {
 } from 'lucide-react';
 
 export const CustomerDailyReports = () => {
-  const { selectedCustomerId } = useAuth();
-  const { customers, reports, shifts, employees } = useApp();
-
-  const currentCust = customers.find((c) => c.id === selectedCustomerId) || customers[0];
+  const [customers, setCustomers] = useState([]);
+  const [shifts, setShifts] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const currentCust = customers[0];
+  const [reports, setReports] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [employeeFilter, setEmployeeFilter] = useState('All');
@@ -31,17 +34,46 @@ export const CustomerDailyReports = () => {
   const [selectedReport, setSelectedReport] = useState(null);
   const [historyReport, setHistoryReport] = useState(null);
 
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    Promise.all([
+      adminApi.reports.list(dateFilter ? { date: dateFilter } : {}),
+      adminApi.reports.summary(dateFilter ? { date: dateFilter } : {}),
+      adminApi.customers.me(),
+      adminApi.customers.myEmployees(),
+      adminApi.shifts.list(),
+    ])
+      .then(([rows, stats, customer, employeeRows, shiftRows]) => {
+        if (active) {
+          setReports(rows);
+          setSummary(stats);
+          setCustomers([customer]);
+          setEmployees(employeeRows);
+          setShifts(shiftRows);
+          setError('');
+        }
+      })
+      .catch((requestError) => { if (active) setError(requestError.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [dateFilter]);
+
+  if (!currentCust && loading) {
+    return <div role="status" className="p-6 text-sm text-slate-500">Loading customer reports...</div>;
+  }
+
   // Filter only this customer's reports
-  const customerReports = reports.filter((r) => r.customerId === currentCust.id);
+  const customerReports = reports;
 
   // Distinct employees who have reports for this customer
-  const assignedEmployeeIds = [...new Set(customerReports.map((r) => r.employeeId))];
+  const assignedEmployeeIds = employees.map((employee) => employee.id);
 
   const filteredReports = customerReports.filter((rep) => {
     const matchesSearch =
-      rep.employeeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      rep.workCompleted.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (rep.issues && rep.issues.toLowerCase().includes(searchQuery.toLowerCase()));
+      (rep.employeeName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (rep.workCompleted || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (rep.issues || '').toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesEmployee = employeeFilter === 'All' || rep.employeeId === employeeFilter;
     const matchesShift = shiftFilter === 'All' || rep.shiftId === shiftFilter;
@@ -64,6 +96,17 @@ export const CustomerDailyReports = () => {
           </p>
         </div>
       </div>
+
+      {error && <div role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{error}</div>}
+      {loading && <div role="status" className="text-xs text-slate-500">Loading customer reports...</div>}
+      {summary && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div className="rounded-xl bg-white border border-slate-200 p-3">Reports: <b>{summary.daily.total}</b></div>
+          <div className="rounded-xl bg-white border border-slate-200 p-3">Submitted: <b>{summary.daily.submitted}</b></div>
+          <div className="rounded-xl bg-white border border-slate-200 p-3">Pending: <b>{summary.daily.pending}</b></div>
+          <div className="rounded-xl bg-white border border-slate-200 p-3">Updated: <b>{summary.daily.updated}</b></div>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-subtle flex flex-col lg:flex-row items-center justify-between gap-4">
@@ -91,7 +134,7 @@ export const CustomerDailyReports = () => {
               const emp = employees.find((e) => e.id === eid);
               return (
                 <option key={eid} value={eid}>
-                  {emp ? emp.name : eid}
+                  {emp ? emp.fullName : eid}
                 </option>
               );
             })}

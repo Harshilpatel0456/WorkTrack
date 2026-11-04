@@ -1,4 +1,5 @@
 import pytest
+from django.core.cache import cache
 from rest_framework import status
 from rest_framework.test import APIClient
 from django.contrib.auth import get_user_model
@@ -16,6 +17,7 @@ User = get_user_model()
 class TestAuthenticationAndRegistration:
     @pytest.fixture(autouse=True)
     def setup_data(self):
+        cache.clear()
         self.client = APIClient()
         self.admin = User.objects.create_user(
             email='admin@test.com',
@@ -196,6 +198,20 @@ class TestAuthenticationAndRegistration:
         # Attempt to use blacklisted refresh token
         refresh_attempt = self.client.post('/api/v1/auth/refresh/', {'refresh': refresh_token})
         assert refresh_attempt.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_logout_cannot_blacklist_another_users_token(self):
+        login_res = self.client.post('/api/v1/auth/login/', {
+            'email': 'emp@test.com',
+            'password': 'EmpPassword123!'
+        })
+        refresh_token = login_res.data['refresh']
+
+        self.client.force_authenticate(user=self.admin)
+        logout_res = self.client.post('/api/v1/auth/logout/', {'refresh': refresh_token})
+        assert logout_res.status_code == status.HTTP_400_BAD_REQUEST
+
+        refresh_attempt = self.client.post('/api/v1/auth/refresh/', {'refresh': refresh_token})
+        assert refresh_attempt.status_code == status.HTTP_200_OK
 
     # ----------------- PASSWORD MANAGEMENT TESTS -----------------
     def test_change_password_success(self):

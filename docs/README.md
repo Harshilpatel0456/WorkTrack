@@ -63,7 +63,7 @@ graph TD
 | `15` | [SECURITY_GUIDELINES.md](SECURITY_GUIDELINES.md) | IDOR defenses, role isolation, password hashing, and CORS/CSRF safeguards. |
 | `16` | [TESTING_STRATEGY.md](TESTING_STRATEGY.md) | Automated testing plan using pytest, pytest-django, and coverage metrics. |
 | `17` | [DEVELOPMENT_SETUP.md](DEVELOPMENT_SETUP.md) | Windows development guide for setting up Node, Python, and PostgreSQL. |
-| `18` | [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) | Production deployment architecture, Gunicorn, Nginx, HTTPS, and S3 media storage. |
+| `18` | [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) | Production Docker Compose deployment, Gunicorn, Nginx, HTTPS, and backup guidance. |
 | `19` | [DEVELOPMENT_ROADMAP.md](DEVELOPMENT_ROADMAP.md) | Phased implementation schedule, milestones, and status indicators. |
 | `20` | [CODING_GUIDELINES.md](CODING_GUIDELINES.md) | PEP 8, DRF conventions, React component standards, and Git commit formats. |
 | `21` | [CHANGELOG.md](CHANGELOG.md) | Semantic version release history and completed deliverables. |
@@ -119,4 +119,3 @@ python -m pytest
 | **Admin** | `admin@worktrack.demo` | `admin123` | System Administrator |
 | **Employee** | `employee@worktrack.demo` | `employee123` | Aarav Shah (EMP-AARAV) |
 | **Customer** | `customer@worktrack.demo` | `customer123` | Robert Henderson (Acme Store #104) |
-

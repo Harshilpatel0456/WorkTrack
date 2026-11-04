@@ -1,10 +1,28 @@
+from pathlib import PurePath
+from django.urls import reverse
 from rest_framework import serializers
 from apps.reports.models import DailyReport, ReportVersion, ReportAttachment
 from apps.shifts.serializers import ShiftAssignmentSerializer
 
 
+REPORT_ATTACHMENT_MAX_SIZE = 10 * 1024 * 1024
+REPORT_ATTACHMENT_EXTENSIONS = {
+    '.csv', '.docx', '.jpeg', '.jpg', '.pdf', '.png', '.txt', '.webp', '.xlsx',
+}
+
+
+def validate_report_attachment(upload):
+    if upload.size > REPORT_ATTACHMENT_MAX_SIZE:
+        raise serializers.ValidationError('File size exceeds 10MB limit.')
+    extension = PurePath(upload.name).suffix.lower()
+    if extension not in REPORT_ATTACHMENT_EXTENSIONS:
+        raise serializers.ValidationError('Unsupported attachment type.')
+    return upload
+
+
 class ReportAttachmentSerializer(serializers.ModelSerializer):
     uploaded_by_name = serializers.CharField(source='uploaded_by.get_full_name', read_only=True)
+    file = serializers.SerializerMethodField()
 
     class Meta:
         model = ReportAttachment
@@ -21,9 +39,18 @@ class ReportAttachmentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'uploaded_by', 'uploaded_by_name', 'uploaded_at']
 
+    def get_file(self, obj):
+        url = reverse(
+            'reports:daily-report-attachment-download',
+            kwargs={'pk': obj.daily_report_id, 'attachment_id': obj.pk},
+        )
+        request = self.context.get('request')
+        return request.build_absolute_uri(url) if request else url
+
 
 class ReportVersionSerializer(serializers.ModelSerializer):
     modified_by_name = serializers.CharField(source='modified_by.get_full_name', read_only=True)
+    modified_by_role = serializers.CharField(source='modified_by.role', read_only=True)
 
     class Meta:
         model = ReportVersion
@@ -33,8 +60,10 @@ class ReportVersionSerializer(serializers.ModelSerializer):
             'version_number',
             'title_snapshot',
             'content_snapshot',
+            'previous_content_snapshot',
             'modified_by',
             'modified_by_name',
+            'modified_by_role',
             'modified_at',
             'change_summary',
         ]
@@ -117,8 +146,25 @@ class DailyReportSerializer(serializers.ModelSerializer):
             return None
 
     def get_shift_date(self, obj):
-        try:
-            return str(obj.shift_assignment.shift_date)
-        except Exception:
-            return None
+        return str(obj.shift_assignment.shift_date)
 
+    def validate_title(self, value):
+        if not value.strip():
+            raise serializers.ValidationError('A report title is required.')
+        return value.strip()
+
+    def validate_work_summary(self, value):
+        if not value.strip():
+            raise serializers.ValidationError('A work summary is required.')
+        return value.strip()
+
+    def validate(self, attrs):
+        status_value = attrs.get('status', getattr(self.instance, 'status', DailyReport.Status.DRAFT))
+        if status_value not in DailyReport.Status.values:
+            raise serializers.ValidationError({'status': 'Select a valid report status.'})
+        if self.instance and self.instance.status == DailyReport.Status.SUBMITTED:
+            if status_value != DailyReport.Status.SUBMITTED:
+                raise serializers.ValidationError({
+                    'status': 'Submitted reports cannot be changed back to draft.'
+                })
+        return attrs

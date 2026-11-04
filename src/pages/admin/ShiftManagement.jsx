@@ -9,7 +9,8 @@ import {
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const EMPTY_SHIFT = {
   name: '', startTime: '08:00', endTime: '16:00', description: '',
-  isOvernight: false, workingDays: [0, 1, 2, 3, 4, 5, 6], is_active: true,
+  gracePeriodMinutes: 15, isOvernight: false,
+  workingDays: [0, 1, 2, 3, 4, 5, 6], is_active: true,
 };
 
 const localDate = () => {
@@ -92,6 +93,7 @@ export const ShiftManagement = () => {
         name: shiftForm.name,
         startTime: shiftForm.startTime,
         endTime: shiftForm.endTime,
+        gracePeriodMinutes: Number(shiftForm.gracePeriodMinutes),
         description: shiftForm.description,
         isOvernight: overnight,
         workingDays: shiftForm.workingDays,
@@ -192,6 +194,7 @@ export const ShiftManagement = () => {
       ...shift,
       startTime: timeValue(shift.startTime),
       endTime: timeValue(shift.endTime),
+      gracePeriodMinutes: shift.gracePeriodMinutes ?? 15,
       workingDays: shift.workingDays || [0, 1, 2, 3, 4, 5, 6],
     });
     setError('');
@@ -349,6 +352,9 @@ export const ShiftManagement = () => {
               }} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 font-normal" />
             </label>
           </div>
+          <label className="block font-bold text-slate-700">Late arrival grace period (minutes)
+            <input type="number" min="0" max="240" required value={shiftForm.gracePeriodMinutes} onChange={(event) => setShiftForm({ ...shiftForm, gracePeriodMinutes: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 font-normal" />
+          </label>
           <label className="block font-bold text-slate-700">Description
             <textarea rows={2} value={shiftForm.description || ''} onChange={(event) => setShiftForm({ ...shiftForm, description: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 font-normal" />
           </label>

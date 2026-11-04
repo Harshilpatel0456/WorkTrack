@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
+import { adminApi } from '../../services/adminApi';
 import { ReportDetailModal } from '../../components/modals/ReportDetailModal';
 import {
   MessageSquare,
@@ -13,58 +14,61 @@ import {
 } from 'lucide-react';
 
 export const CustomerFeedback = () => {
-  const { selectedCustomerId, user } = useAuth();
-  const { reports, customers, addFeedbackComment, replyToComment } = useApp();
+  const { selectedCustomerId } = useAuth();
+  const { customers, showToast } = useApp();
 
   const currentCust = customers.find((c) => c.id === selectedCustomerId) || customers[0];
+  const [customerReports, setCustomerReports] = useState([]);
+  const [feedbackList, setFeedbackList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
-  const [replyTextMap, setReplyTextMap] = useState({});
   const [newCommentReportId, setNewCommentReportId] = useState('');
   const [newCommentText, setNewCommentText] = useState('');
 
-  // Collect reports associated with this customer
-  const customerReports = reports.filter((r) => r.customerId === currentCust.id);
-
-  // Collect all feedback items
-  const feedbackList = [];
-  customerReports.forEach((rep) => {
-    (rep.comments || []).forEach((cmt) => {
-      feedbackList.push({
-        ...cmt,
-        reportId: rep.id,
-        reportShift: rep.shiftName,
-        reportDate: rep.reportingDate,
-        employeeName: rep.employeeName,
-        fullReport: rep,
-      });
-    });
-  });
-
-  const handlePostReply = (reportId, commentId) => {
-    const text = replyTextMap[commentId];
-    if (!text || !text.trim()) return;
-
-    replyToComment(reportId, commentId, {
-      authorName: user?.name || currentCust.contactPerson,
-      authorRole: `Customer (${currentCust.companyName})`,
-      message: text.trim(),
-    });
-
-    setReplyTextMap((prev) => ({ ...prev, [commentId]: '' }));
+  const loadFeedback = async () => {
+    const [reports, comments] = await Promise.all([adminApi.reports.list(), adminApi.reports.allComments()]);
+    const reportsById = new Map(reports.map((report) => [report.id, report]));
+    setCustomerReports(reports);
+    setFeedbackList(comments.flatMap((comment) => {
+      const report = reportsById.get(comment.daily_report);
+      return report ? [{
+        ...comment,
+        reportId: report.id,
+        reportShift: report.shiftName,
+        reportDate: report.reportingDate,
+        employeeName: report.employeeName,
+        fullReport: report,
+      }] : [];
+    }));
   };
 
-  const handlePostNewComment = (e) => {
+  useEffect(() => {
+    let active = true;
+    loadFeedback()
+      .then(() => { if (active) setError(''); })
+      .catch((requestError) => { if (active) setError(requestError.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const handlePostNewComment = async (e) => {
     e.preventDefault();
     if (!newCommentReportId || !newCommentText.trim()) return;
-
-    addFeedbackComment(newCommentReportId, {
-      authorName: user?.name || currentCust.contactPerson,
-      authorRole: `Customer (${currentCust.companyName})`,
-      message: newCommentText.trim(),
-    });
-
-    setNewCommentText('');
-    setNewCommentReportId('');
+    setSubmitting(true);
+    try {
+      await adminApi.reports.addComment(newCommentReportId, newCommentText.trim());
+      await loadFeedback();
+      setNewCommentText('');
+      setNewCommentReportId('');
+      setError('');
+      showToast('Feedback submitted.');
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -79,6 +83,9 @@ export const CustomerFeedback = () => {
           Direct communication channel with on-site staff. Inquire regarding completed deliverables or handover procedures.
         </p>
       </div>
+
+      {error && <div role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{error}</div>}
+      {loading && <div role="status" className="text-xs text-slate-500">Loading feedback...</div>}
 
       {/* New Feedback Card */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-subtle space-y-4">
@@ -121,7 +128,7 @@ export const CustomerFeedback = () => {
           <div className="flex justify-end">
             <button
               type="submit"
-              disabled={!newCommentReportId || !newCommentText.trim()}
+              disabled={!newCommentReportId || !newCommentText.trim() || submitting}
               className="px-5 py-2 bg-[#245CE2] hover:bg-[#1A45B0] disabled:opacity-50 text-white rounded-xl font-bold flex items-center gap-1.5 transition-all shadow-md"
             >
               <Send className="w-3.5 h-3.5" />
@@ -211,26 +218,6 @@ export const CustomerFeedback = () => {
                 </div>
               )}
 
-              {/* Follow-up reply input */}
-              <div className="pl-12 pt-2">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    placeholder="Send follow-up comment..."
-                    value={replyTextMap[item.id] || ''}
-                    onChange={(e) => setReplyTextMap({ ...replyTextMap, [item.id]: e.target.value })}
-                    className="flex-1 px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#245CE2]"
-                  />
-                  <button
-                    onClick={() => handlePostReply(item.reportId, item.id)}
-                    disabled={!replyTextMap[item.id]?.trim()}
-                    className="px-4 py-2 bg-[#245CE2] hover:bg-[#1A45B0] disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    Send
-                  </button>
-                </div>
-              </div>
             </div>
           ))
         )}

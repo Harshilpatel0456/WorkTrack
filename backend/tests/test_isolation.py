@@ -9,6 +9,7 @@ from apps.customers.models import CustomerProfile
 from apps.assignments.models import EmployeeCustomerAssignment
 from apps.shifts.models import Shift, ShiftAssignment
 from apps.reports.models import DailyReport
+from apps.attendance.models import Attendance
 
 
 @pytest.mark.django_db
@@ -92,6 +93,66 @@ class TestCustomerDataIsolationAndRBAC:
         assert detail_response.status_code == status.HTTP_200_OK
         assert detail_response.data['title'] == 'Confidential Report for Store Alpha'
 
+    def test_customer_portal_endpoints_are_scoped_and_aggregates_match_records(self):
+        other_user = User.objects.create_user(
+            email='other-employee@test.com',
+            username='other-employee@test.com',
+            password='pass',
+            role=User.Role.EMPLOYEE,
+        )
+        other_employee = EmployeeProfile.objects.create(
+            user=other_user,
+            employee_code='EMP-002',
+            phone='1234567891',
+        )
+        other_assignment = EmployeeCustomerAssignment.objects.create(
+            employee=other_employee,
+            customer=self.cust2_profile,
+            assigned_by=self.admin,
+            status=EmployeeCustomerAssignment.Status.ACTIVE,
+        )
+        other_schedule = ShiftAssignment.objects.create(
+            employee_customer_assignment=other_assignment,
+            shift=self.shift,
+            shift_date=timezone.localdate(),
+            assigned_by=self.admin,
+        )
+        now = timezone.now()
+        Attendance.objects.create(
+            shift_assignment=self.shift_assign1,
+            check_in=now,
+            attendance_status=Attendance.Status.PRESENT,
+        )
+        Attendance.objects.create(
+            shift_assignment=other_schedule,
+            check_in=now,
+            attendance_status=Attendance.Status.LATE,
+        )
+
+        self.client.force_authenticate(user=self.cust1_user)
+        assert self.client.get('/api/v1/customers/me/').data['id'] == str(self.cust1_profile.id)
+        employee_rows = self.client.get('/api/v1/customers/my-employees/').data
+        assert [row['id'] for row in employee_rows] == [str(self.emp_profile.id)]
+
+        assignments = self.client.get('/api/v1/assignments/').data
+        assignments = assignments.get('results', assignments)
+        assert [row['id'] for row in assignments] == [str(self.assignment1.id)]
+
+        schedules = self.client.get('/api/v1/shifts/schedules/').data
+        schedules = schedules.get('results', schedules)
+        assert [row['id'] for row in schedules] == [str(self.shift_assign1.id)]
+
+        attendance = self.client.get('/api/v1/attendance/', {
+            'date': timezone.localdate().isoformat(),
+        }).data
+        attendance = attendance.get('results', attendance)
+        assert [str(row['shift_assignment']) for row in attendance] == [str(self.shift_assign1.id)]
+        summary = self.client.get('/api/v1/attendance/summary/', {
+            'date': timezone.localdate().isoformat(),
+        }).data
+        assert summary['daily']['total'] == len(attendance) == 1
+        assert summary['daily']['statuses']['PRESENT'] == 1
+
     def test_employee_cannot_create_customer_accounts(self):
         self.client.force_authenticate(user=self.emp_user)
         response = self.client.post('/api/v1/customers/', {
@@ -103,4 +164,3 @@ class TestCustomerDataIsolationAndRBAC:
             }
         }, format='json')
         assert response.status_code == status.HTTP_403_FORBIDDEN
-

@@ -9,6 +9,7 @@ python-decouple>=3.8,<3.9
 celery>=5.4,<5.5
 redis>=5.1,<5.2
 Pillow>=10.4,<11.0
+gunicorn>=23,<24
+whitenoise>=6.8,<7
 pytest>=8.3,<8.4
 pytest-django>=4.9,<5.0
-

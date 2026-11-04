@@ -194,45 +194,42 @@ All list endpoints return paginated responses:
 
 ## 7. Attendance Telemetry Endpoints (`/attendance/`)
 
-### 7.1 Employee Check-In
-- **Endpoint:** `POST /api/v1/attendance/check-in/`
-- **Auth Required:** Employee
-- **Request Body:**
-```json
-{
-  "shiftAssignmentId": "d1e2f3a4-...",
-  "notes": "Punched in on-time via security terminal."
-}
-```
-- **Response `201 Created`:**
-```json
-{
-  "id": "att-123",
-  "shiftAssignmentId": "d1e2f3a4-...",
-  "checkIn": "2026-10-31T06:01:12Z",
-  "checkOut": null,
-  "attendanceStatus": "PRESENT",
-  "durationHours": 0.0
-}
-```
+Attendance timestamps are stored in UTC and converted to the viewer's local timezone by the frontend. Shift schedules use the customer's IANA timezone; overnight attendance belongs to the shift's start date. All read endpoints are scoped to the authenticated role.
 
-### 7.2 Employee Check-Out
-- **Endpoint:** `POST /api/v1/attendance/check-out/`
-- **Auth Required:** Employee
-- **Response `200 OK`:**
+### 7.1 Employee Shifts and Punch Actions
+- `GET /api/v1/attendance/my-shifts/` — today's assigned shifts, including an open overnight shift.
+- `GET /api/v1/attendance/customer-shifts/?date=YYYY-MM-DD` — customer-scoped shift and punch status, including shifts without a punch.
+- `GET /api/v1/attendance/my-attendance/` — paginated employee history; accepts `date`, `date_from`, `date_to`, and `status`.
+- `POST /api/v1/attendance/check_in/` — employee may check in at/after shift start and before shift end.
+- `POST /api/v1/attendance/check_out/` — employee may check out at/after shift end, after checking in.
+- **Punch request body:**
 ```json
 {
-  "id": "att-123",
-  "checkIn": "2026-10-31T06:01:12Z",
-  "checkOut": "2026-10-31T14:02:45Z",
-  "attendanceStatus": "PRESENT",
-  "durationHours": 8.02
+  "shift_assignment_id": "d1e2f3a4-...",
+  "notes": "Punched in on-time via security terminal.",
+  "location_verified": true
 }
 ```
+- Check-in status is `PRESENT` through the shift's configured `gracePeriodMinutes` (15 by default), then `LATE`. Duplicate check-ins, early/late punches outside the shift window, and check-outs without a check-in are rejected.
+- Response records include `shift_date`, employee/customer/shift identifiers and names, `check_in`, `check_out`, `attendance_status`, and `duration_hours`.
 
-### 7.3 Attendance Audit List
-- `GET /api/v1/attendance/?date=2026-10-31&status=PRESENT`
-- `GET /api/v1/attendance/my-attendance/`
+### 7.2 Admin and Customer Attendance
+- `GET /api/v1/attendance/` — admin sees all attendance; employees see only their own and customers only records for their own customer account. Supports `employee`, `customer`, `shift`, `date`, `date_from`, `date_to`, and `status`.
+- `GET /api/v1/attendance/summary/?date=YYYY-MM-DD` — role-scoped daily and overall totals, status counts, and tracked hours.
+- `PATCH /api/v1/attendance/{id}/correct/` — admin only; accepts `check_in`, `check_out`, `attendance_status`, and `notes`. Validates punch order/status and recalculates duration; every correction writes before/after values to the activity audit log.
+- After shift end, a missing punch is recorded as `ABSENT`; a check-in without check-out is marked `INCOMPLETE`.
+
+Attendance statuses: `PRESENT`, `ABSENT`, `LATE`, `INCOMPLETE` (legacy `HALF_DAY` and `OVERTIME` values remain readable).
+
+Example correction:
+```json
+{
+  "check_in": "2026-10-31T06:01:12Z",
+  "check_out": "2026-10-31T14:02:45Z",
+  "attendance_status": "PRESENT",
+  "notes": "Approved correction"
+}
+```
 
 ---
 
@@ -241,16 +238,20 @@ All list endpoints return paginated responses:
 ### 8.1 Submit Daily Report
 - **Endpoint:** `POST /api/v1/reports/`
 - **Auth Required:** Employee
+- **Request fields:** `shift_assignment`, `title`, `work_summary`, `tasks_completed`, `pending_tasks`, `issues_or_blockers`, `additional_remarks`, and optional `status` (`DRAFT` or `SUBMITTED`).
+- The employee may report only on an active, non-cancelled assigned shift. A shift assignment can have only one report.
+- `POST /api/v1/reports/{id}/submit/` submits a saved draft.
 - **Request Body:**
 ```json
 {
-  "shiftAssignmentId": "d1e2f3a4-...",
+  "shift_assignment": "d1e2f3a4-...",
   "title": "Morning Shift Handover & Security Audit",
-  "workSummary": "Supervised store opening, active register checkout, safe room locked.",
-  "tasksCompleted": "- Verified 10 CCTV feeds\n- Monitored morning armored car cash pickup",
-  "pendingTasks": "- Handover Register #2 cash audit to Afternoon Shift",
-  "issuesOrBlockers": "None. Emergency exits fully secured.",
-  "additionalRemarks": "Staff adhering to badge policy."
+  "work_summary": "Supervised store opening and secured the premises.",
+  "tasks_completed": "Completed the opening checklist.",
+  "pending_tasks": "Handover the cash audit to the next shift.",
+  "issues_or_blockers": "None.",
+  "additional_remarks": "Staff adhering to badge policy.",
+  "status": "SUBMITTED"
 }
 ```
 
@@ -259,11 +260,11 @@ All list endpoints return paginated responses:
 - **Request Body:**
 ```json
 {
-  "tasksCompleted": "- Verified 10 CCTV feeds\n- Monitored morning armored car cash pickup\n- Re-checked jewelry case lock",
-  "changeSummary": "Added missing jewelry case lock audit check."
+  "tasks_completed": "Completed the opening checklist and re-checked the storage lock.",
+  "change_summary": "Added a missing security check."
 }
 ```
-- **Behavior:** Increments version from 1 to 2; saves snapshot in `ReportVersion`.
+- **Behavior:** Increments the version and saves immutable current and previous content snapshots, editor, timestamp, and change summary.
 
 ### 8.3 Get Report Versions
 - **Endpoint:** `GET /api/v1/reports/{id}/versions/`
@@ -271,36 +272,40 @@ All list endpoints return paginated responses:
 ```json
 [
   {
-    "versionNumber": 2,
-    "modifiedAt": "2026-10-31T14:15:00Z",
-    "modifiedBy": "Aarav Shah",
-    "changeSummary": "Added missing jewelry case lock audit check."
+    "version_number": 2,
+    "modified_at": "2026-10-31T14:15:00Z",
+    "modified_by_name": "Aarav Shah",
+    "content_snapshot": {"title": "Morning Shift Handover", "work_summary": "Updated summary."},
+    "previous_content_snapshot": {"title": "Morning Shift Handover", "work_summary": "Previous summary."},
+    "change_summary": "Added a missing security check."
   },
   {
-    "versionNumber": 1,
-    "modifiedAt": "2026-10-31T13:55:00Z",
-    "modifiedBy": "Aarav Shah",
-    "changeSummary": "Initial submission"
+    "version_number": 1,
+    "modified_at": "2026-10-31T13:55:00Z",
+    "modified_by_name": "Aarav Shah",
+    "change_summary": "Initial submission"
   }
 ]
 ```
 
 ---
 
-## 9. Feedback & Threaded Comments (`/reports/{id}/comments/`)
+## 9. Feedback & Threaded Comments (`/feedback/comments/`)
 
 ### 9.1 Post Comment
-- **Endpoint:** `POST /api/v1/reports/{id}/comments/`
+- **Endpoint:** `GET /api/v1/feedback/comments/?daily_report={id}` and `POST /api/v1/feedback/comments/`
 - **Auth Required:** Customer or Admin
+- Customers can comment only on submitted reports belonging to their account.
 - **Request Body:**
 ```json
 {
-  "content": "Can you verify if Register #2 drawer was closed after the 11 AM surge?"
+  "daily_report": "d1e2f3a4-...",
+  "content": "Can you verify if the storage area was secured after the shift?"
 }
 ```
 
 ### 9.2 Reply to Comment
-- **Endpoint:** `POST /api/v1/comments/{id}/reply/`
+- **Endpoint:** `POST /api/v1/feedback/comments/{id}/reply/`
 - **Auth Required:** Employee or Admin
 - **Request Body:**
 ```json
@@ -408,4 +413,3 @@ All list endpoints return paginated responses:
   "recentSurveillanceStatus": "All Clear"
 }
 ```
-

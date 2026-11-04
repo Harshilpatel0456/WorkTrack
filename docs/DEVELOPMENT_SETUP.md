@@ -64,8 +64,8 @@ docker compose exec backend python -m pytest
 # Stop containers without deleting database data
 docker compose down
 
-# ⚠️ CAUTION: Stop containers AND permanently wipe database volume
-docker compose down -v
+# Do not use "docker compose down -v" unless you intentionally want
+# to permanently remove all Compose-managed database data.
 ```
 
 ### 2.3 Hybrid Mode: PostgreSQL in Docker, Django Locally on Windows
@@ -83,7 +83,7 @@ cd backend
 # DB_HOST=127.0.0.1
 # DB_PORT=5432
 # DB_USER=worktrack_user
-# DB_PASSWORD=worktrack_secure_pass_2026
+# DB_PASSWORD=change-me-local-db-password
 
 # 4. Run Django migrations and start server locally
 python manage.py migrate
@@ -121,14 +121,14 @@ Copy `.env.example` to `.env`:
 ```powershell
 Copy-Item .env.example .env
 ```
-Default `.env` configuration (SQLite zero-setup):
+For SQLite-based local development, set:
 ```ini
 DEBUG=True
-SECRET_KEY=django-insecure-worktrack-development-key-2026
+SECRET_KEY=replace-with-a-random-development-secret
 ALLOWED_HOSTS=127.0.0.1,localhost
 
 # Database selection: 'sqlite' or 'postgresql'
-DB_ENGINE=sqlite
+DB_ENGINE=sqlite3
 
 # If using PostgreSQL:
 DB_NAME=worktrack_db
@@ -200,4 +200,3 @@ Use any of the following accounts on the login screen (`/login`) or use the top 
 
 ### Error: `FATAL: password authentication failed for user "postgres"`
 * **Fix:** Leave `DB_ENGINE=sqlite` in `backend/.env`. The application runs 100% of features and automated tests seamlessly on SQLite. When connecting to production PostgreSQL, verify database credentials in `pgAdmin 4`.
-

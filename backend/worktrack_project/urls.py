@@ -1,3 +1,5 @@
+from django.db import DatabaseError, connections
+from django.http import JsonResponse
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
@@ -8,7 +10,18 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 
+
+def health_check(request):
+    try:
+        with connections['default'].cursor() as cursor:
+            cursor.execute('SELECT 1')
+    except DatabaseError:
+        return JsonResponse({'status': 'unavailable'}, status=503)
+    return JsonResponse({'status': 'ok'})
+
+
 urlpatterns = [
+    path('healthz/', health_check, name='health-check'),
     path('admin/', admin.site.urls),
 
     # OpenAPI Schema & Interactive Swagger UI

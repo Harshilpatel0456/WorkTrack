@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal } from '../common/Modal';
 import { Badge } from '../common/Badge';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
+import { adminApi } from '../../services/adminApi';
 import {
   Clock,
   User,
@@ -19,49 +20,78 @@ import {
 } from 'lucide-react';
 
 export const ReportDetailModal = ({ isOpen, onClose, report, onOpenVersionHistory, onEditReport }) => {
-  if (!report) return null;
-
   const { role, user } = useAuth();
-  const { addFeedbackComment, replyToComment } = useApp();
+  const { showToast } = useApp();
 
   const [commentText, setCommentText] = useState('');
   const [replyTextMap, setReplyTextMap] = useState({});
   const [replyingToId, setReplyingToId] = useState(null);
+  const [comments, setComments] = useState([]);
+  const [commentError, setCommentError] = useState('');
+  const [commentBusy, setCommentBusy] = useState(false);
 
-  const handlePostComment = (e) => {
+  useEffect(() => {
+    if (!isOpen || !report?.id) return;
+    let active = true;
+    adminApi.reports.comments(report.id)
+      .then((rows) => { if (active) { setComments(rows); setCommentError(''); } })
+      .catch((error) => { if (active) setCommentError(error.message); });
+    return () => { active = false; };
+  }, [isOpen, report?.id]);
+
+  if (!report) return null;
+
+  const employeeName = report.employeeName || report.employee_name;
+  const customerName = report.customerName || report.customer_name;
+  const shiftName = report.shiftName || report.shift_name;
+  const reportingDate = report.reportingDate || report.shift_date;
+  const workCompleted = report.workCompleted || report.work_summary;
+  const pendingTasks = report.pendingTasks || report.pending_tasks;
+  const issues = report.issues || report.issues_or_blockers;
+  const additionalRemarks = report.additionalRemarks || report.additional_remarks;
+  const isAuthor = role === 'employee'
+    && (report.employeeId || report.shift_details?.employeeId) === (user?.employeeProfile?.id || user?.id);
+
+  const handlePostComment = async (e) => {
     e.preventDefault();
     if (!commentText.trim()) return;
-
-    addFeedbackComment(report.id, {
-      authorName: user?.name || (role === 'customer' ? 'Customer Client' : 'Reviewer'),
-      authorRole: role === 'customer' ? `Customer (${report.customerName})` : 'Administrator',
-      message: commentText.trim(),
-    });
-    setCommentText('');
+    setCommentBusy(true);
+    try {
+      await adminApi.reports.addComment(report.id, commentText.trim());
+      setComments(await adminApi.reports.comments(report.id));
+      setCommentText('');
+      setCommentError('');
+      showToast('Feedback posted.');
+    } catch (error) {
+      setCommentError(error.message);
+    } finally {
+      setCommentBusy(false);
+    }
   };
 
-  const handlePostReply = (commentId) => {
+  const handlePostReply = async (commentId) => {
     const text = replyTextMap[commentId];
     if (!text || !text.trim()) return;
-
-    replyToComment(report.id, commentId, {
-      authorName: user?.name || 'Staff Member',
-      authorRole: role === 'employee' ? `Employee (${report.employeeName})` : 'Representative',
-      message: text.trim(),
-    });
-
-    setReplyTextMap(prev => ({ ...prev, [commentId]: '' }));
-    setReplyingToId(null);
+    setCommentBusy(true);
+    try {
+      await adminApi.reports.reply(commentId, text.trim());
+      setComments(await adminApi.reports.comments(report.id));
+      setReplyTextMap(prev => ({ ...prev, [commentId]: '' }));
+      setReplyingToId(null);
+      setCommentError('');
+    } catch (error) {
+      setCommentError(error.message);
+    } finally {
+      setCommentBusy(false);
+    }
   };
-
-  const isAuthor = role === 'employee' && report.employeeId === user?.id;
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`Shift Daily Report • ${report.shiftName}`}
-      subtitle={`Submitted by ${report.employeeName} for ${report.customerName} on ${report.reportingDate}`}
+      title={`Shift Daily Report • ${shiftName}`}
+      subtitle={`Submitted by ${employeeName} for ${customerName} on ${reportingDate}`}
       maxWidth="max-w-4xl"
     >
       <div className="space-y-6">
@@ -71,21 +101,21 @@ export const ReportDetailModal = ({ isOpen, onClose, report, onOpenVersionHistor
             <span className="text-slate-400 font-medium block">Reporting Staff</span>
             <div className="font-bold text-slate-800 flex items-center gap-1.5 mt-0.5">
               <User className="w-3.5 h-3.5 text-[#245CE2]" />
-              {report.employeeName}
+              {employeeName}
             </div>
           </div>
           <div>
             <span className="text-slate-400 font-medium block">Customer Client</span>
             <div className="font-bold text-slate-800 flex items-center gap-1.5 mt-0.5">
               <Building2 className="w-3.5 h-3.5 text-[#245CE2]" />
-              {report.customerName}
+              {customerName}
             </div>
           </div>
           <div>
             <span className="text-slate-400 font-medium block">Shift & Date</span>
             <div className="font-bold text-slate-800 flex items-center gap-1.5 mt-0.5">
               <Calendar className="w-3.5 h-3.5 text-[#245CE2]" />
-              {report.reportingDate}
+              {reportingDate}
             </div>
           </div>
           <div>
@@ -129,7 +159,7 @@ export const ReportDetailModal = ({ isOpen, onClose, report, onOpenVersionHistor
             1. Work Completed During Shift
           </h4>
           <div className="p-4 rounded-xl bg-white border border-slate-200 text-xs text-slate-800 whitespace-pre-line leading-relaxed shadow-subtle">
-            {report.workCompleted}
+            {workCompleted}
           </div>
         </div>
 
@@ -140,7 +170,7 @@ export const ReportDetailModal = ({ isOpen, onClose, report, onOpenVersionHistor
             2. Pending Tasks Handed Over
           </h4>
           <div className="p-4 rounded-xl bg-white border border-slate-200 text-xs text-slate-800 whitespace-pre-line leading-relaxed shadow-subtle">
-            {report.pendingTasks || 'No pending tasks recorded for the incoming shift.'}
+            {pendingTasks || 'No pending tasks recorded for the incoming shift.'}
           </div>
         </div>
 
@@ -151,9 +181,16 @@ export const ReportDetailModal = ({ isOpen, onClose, report, onOpenVersionHistor
             3. Issues / Challenges Encountered
           </h4>
           <div className="p-4 rounded-xl bg-rose-50/50 border border-rose-200/80 text-xs text-rose-950 whitespace-pre-line leading-relaxed shadow-subtle">
-            {report.issues || 'No obstacles or equipment issues encountered.'}
+            {issues || 'No obstacles or equipment issues encountered.'}
           </div>
         </div>
+
+        {additionalRemarks && (
+          <div>
+            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Additional Remarks</h4>
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 whitespace-pre-line">{additionalRemarks}</div>
+          </div>
+        )}
 
         {/* Section 4: Attachments */}
         {report.attachments && report.attachments.length > 0 && (
@@ -175,13 +212,15 @@ export const ReportDetailModal = ({ isOpen, onClose, report, onOpenVersionHistor
                       <p className="text-[10px] text-slate-400">{file.size || '1.2 MB'}</p>
                     </div>
                   </div>
-                  <button 
-                    onClick={() => alert(`Simulated Download: ${file.name} saved locally.`)}
+                  <a
+                    href={file.file}
+                    target="_blank"
+                    rel="noreferrer"
                     className="p-1.5 text-slate-500 hover:text-[#245CE2] rounded-lg transition-colors"
                     title="Download attachment"
                   >
                     <Download className="w-3.5 h-3.5" />
-                  </button>
+                  </a>
                 </div>
               ))}
             </div>
@@ -193,18 +232,19 @@ export const ReportDetailModal = ({ isOpen, onClose, report, onOpenVersionHistor
           <div className="flex items-center justify-between mb-4">
             <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-[#245CE2]" />
-              Customer Feedback & Handover Discussion ({(report.comments || []).length})
+              Customer Feedback & Handover Discussion ({comments.length})
             </h4>
           </div>
 
           {/* Comment Stream */}
           <div className="space-y-4 mb-5">
-            {(!report.comments || report.comments.length === 0) ? (
+            {commentError && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-xs text-rose-700">{commentError}</p>}
+            {comments.length === 0 ? (
               <div className="p-5 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 text-xs text-slate-400">
                 No feedback submitted yet for this report.
               </div>
             ) : (
-              report.comments.map((comment) => (
+              comments.map((comment) => (
                 <div key={comment.id} className="p-4 rounded-xl bg-slate-50/80 border border-slate-200 text-xs space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -246,6 +286,7 @@ export const ReportDetailModal = ({ isOpen, onClose, report, onOpenVersionHistor
                       />
                       <button
                         onClick={() => handlePostReply(comment.id)}
+                        disabled={commentBusy}
                         className="px-3 py-1.5 bg-[#245CE2] text-white rounded-lg text-xs font-semibold hover:bg-[#1A45B0]"
                       >
                         Reply
@@ -257,21 +298,21 @@ export const ReportDetailModal = ({ isOpen, onClose, report, onOpenVersionHistor
                         Cancel
                       </button>
                     </div>
-                  ) : (
+                  ) : role === 'employee' || role === 'admin' ? (
                     <button
                       onClick={() => setReplyingToId(comment.id)}
                       className="text-[11px] font-semibold text-[#245CE2] hover:underline inline-flex items-center gap-1"
                     >
                       Reply to this comment
                     </button>
-                  )}
+                  ) : null}
                 </div>
               ))
             )}
           </div>
 
           {/* New Feedback Submission Form */}
-          <form onSubmit={handlePostComment} className="flex gap-2 items-center">
+          {(role === 'customer' || role === 'admin') && <form onSubmit={handlePostComment} className="flex gap-2 items-center">
             <input
               type="text"
               placeholder={
@@ -285,13 +326,13 @@ export const ReportDetailModal = ({ isOpen, onClose, report, onOpenVersionHistor
             />
             <button
               type="submit"
-              disabled={!commentText.trim()}
+              disabled={!commentText.trim() || commentBusy}
               className="px-4 py-2.5 bg-[#245CE2] text-white rounded-xl text-xs font-bold hover:bg-[#1A45B0] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-all shadow-sm"
             >
               <Send className="w-3.5 h-3.5" />
               Post Feedback
             </button>
-          </form>
+          </form>}
         </div>
       </div>
     </Modal>

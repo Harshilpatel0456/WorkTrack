@@ -36,6 +36,7 @@ venv/
 ENV/
 backend/.env
 .env
+.env.production
 # Database & Docker
 postgres_data/
 *.sqlite3
@@ -44,4 +45,3 @@ media/
 backend/staticfiles/
 staticfiles/
 .pytest_cache/
-

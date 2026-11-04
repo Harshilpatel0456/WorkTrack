@@ -1,6 +1,7 @@
 import uuid
 from django.db import models
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.utils.translation import gettext_lazy as _
 from apps.assignments.models import EmployeeCustomerAssignment
 
@@ -14,6 +15,10 @@ class Shift(models.Model):
     name = models.CharField(max_length=100)
     start_time = models.TimeField()
     end_time = models.TimeField()
+    grace_period_minutes = models.PositiveSmallIntegerField(
+        default=15,
+        validators=[MinValueValidator(0)],
+    )
     description = models.TextField(blank=True, null=True)
     is_overnight = models.BooleanField(default=False)
     working_days = models.JSONField(default=all_weekdays)

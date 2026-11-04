@@ -10,6 +10,11 @@ from apps.employees.models import EmployeeProfile
 class ShiftSerializer(serializers.ModelSerializer):
     startTime = serializers.TimeField(source='start_time')
     endTime = serializers.TimeField(source='end_time')
+    gracePeriodMinutes = serializers.IntegerField(
+        source='grace_period_minutes',
+        min_value=0,
+        default=15,
+    )
     isOvernight = serializers.BooleanField(source='is_overnight', default=False)
     workingDays = serializers.ListField(
         source='working_days',
@@ -26,6 +31,7 @@ class ShiftSerializer(serializers.ModelSerializer):
             'name',
             'startTime',
             'endTime',
+            'gracePeriodMinutes',
             'description',
             'isOvernight',
             'workingDays',

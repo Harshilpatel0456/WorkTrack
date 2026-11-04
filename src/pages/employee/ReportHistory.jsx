@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
+import { adminApi } from '../../services/adminApi';
 import { Badge } from '../../components/common/Badge';
 import { ReportDetailModal } from '../../components/modals/ReportDetailModal';
 import { VersionHistoryModal } from '../../components/modals/VersionHistoryModal';
@@ -19,23 +20,35 @@ import {
 } from 'lucide-react';
 
 export const ReportHistory = () => {
-  const { selectedEmployeeId } = useAuth();
-  const { reports, employees } = useApp();
+  const { user, selectedEmployeeId } = useAuth();
+  const { employees } = useApp();
   const navigate = useNavigate();
 
-  const currentEmp = employees.find((e) => e.id === selectedEmployeeId) || employees[0];
+  const currentEmp = user?.employeeProfile || employees.find((e) => e.id === selectedEmployeeId) || employees[0];
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedReport, setSelectedReport] = useState(null);
   const [historyReport, setHistoryReport] = useState(null);
 
-  const myReports = reports.filter((r) => r.employeeId === currentEmp.id);
+  useEffect(() => {
+    let active = true;
+    adminApi.reports.list()
+      .then((rows) => { if (active) setReports(rows); })
+      .catch((requestError) => { if (active) setError(requestError.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const myReports = reports;
 
   const filteredReports = myReports.filter((rep) => {
     return (
-      rep.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      rep.shiftName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      rep.workCompleted.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      rep.reportingDate.includes(searchQuery)
+      (rep.customerName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (rep.shiftName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (rep.workCompleted || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (rep.reportingDate || '').includes(searchQuery)
     );
   });
 
@@ -49,9 +62,12 @@ export const ReportHistory = () => {
             Personal Daily Shift Report Archive
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Complete history of all daily shift reports and revisions submitted by {currentEmp.name}.
+            Complete history of all daily shift reports and revisions submitted by {user?.name || currentEmp?.name || 'you'}.
           </p>
         </div>
+
+        {error && <div role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{error}</div>}
+        {loading && <div role="status" className="text-xs text-slate-500">Loading your reports...</div>}
 
         <button
           onClick={() => navigate('/employee/daily-report')}

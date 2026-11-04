@@ -23,7 +23,7 @@ import { INITIAL_HOURLY_SURVEILLANCE_BATCHES } from '../../data/initialData';
 
 export const CustomerSurveillance = () => {
   const { selectedCustomerId } = useAuth();
-  const { surveillanceBatches = [], customers = [], notificationSettings = {} } = useApp();
+  const { surveillanceBatches = [], customers = [] } = useApp();
   const navigate = useNavigate();
 
   const currentCust = customers?.find((c) => c.id === selectedCustomerId) || customers?.[0] || { id: 'cust-1', companyName: 'Acme Retail Store #104' };
@@ -40,12 +40,6 @@ export const CustomerSurveillance = () => {
 
   const toggleExpand = (batchId) => {
     setExpandedBatchId(prev => prev === batchId ? null : batchId);
-  };
-
-  const getFrequencyLabel = (freq) => {
-    if (freq === 'hourly') return 'Once every hour (Hourly Alerts)';
-    if (freq === '6hours') return 'Every 6 hours (6-Hour Digest)';
-    return 'At day end (Daily Closeout Summary)';
   };
 
   return (
@@ -70,10 +64,8 @@ export const CustomerSurveillance = () => {
         >
           <Sliders className="w-4 h-4 text-[#245CE2]" />
           <div>
-            <span className="text-[10px] text-slate-400 font-bold uppercase block leading-none">Alert Cadence:</span>
-            <span className="font-bold text-slate-800 text-[11px] leading-tight">
-              {getFrequencyLabel(notificationSettings.frequency)}
-            </span>
+            <span className="text-[10px] text-slate-400 font-bold uppercase block leading-none">Notification Preferences</span>
+            <span className="font-bold text-slate-800 text-[11px] leading-tight">Manage delivery settings</span>
           </div>
         </div>
       </div>

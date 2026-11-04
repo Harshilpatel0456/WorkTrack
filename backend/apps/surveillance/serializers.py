@@ -52,5 +52,22 @@ class SurveillanceBatchSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'total_cameras', 'created_at', 'updated_at']
+        read_only_fields = [
+            'id',
+            'status',
+            'total_cameras',
+            'flagged_suspicious_count',
+            'submitted_at',
+            'customer_notified',
+            'created_at',
+            'updated_at',
+        ]
 
+    def get_fields(self):
+        fields = super().get_fields()
+        if self.instance:
+            editable_fields = {'overall_assessment', 'actions_taken'}
+            for name, field in fields.items():
+                if name not in editable_fields:
+                    field.read_only = True
+        return fields

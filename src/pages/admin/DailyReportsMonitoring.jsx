@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { adminApi } from '../../services/adminApi';
 import { Badge } from '../../components/common/Badge';
 import { ReportDetailModal } from '../../components/modals/ReportDetailModal';
 import { VersionHistoryModal } from '../../components/modals/VersionHistoryModal';
@@ -18,27 +19,46 @@ import {
 } from 'lucide-react';
 
 export const DailyReportsMonitoring = () => {
-  const { reports, customers, shifts, employees } = useApp();
+  const { customers, shifts, employees } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [customerFilter, setCustomerFilter] = useState('All');
   const [shiftFilter, setShiftFilter] = useState('All');
+  const [employeeFilter, setEmployeeFilter] = useState('All');
+  const [dateFilter, setDateFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [reports, setReports] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [selectedReport, setSelectedReport] = useState(null);
   const [historyReport, setHistoryReport] = useState(null);
 
-  const filteredReports = reports.filter((rep) => {
-    const q = (searchQuery || '').toLowerCase();
-    const matchesSearch =
-      (rep.employeeName || '').toLowerCase().includes(q) ||
-      (rep.customerName || '').toLowerCase().includes(q) ||
-      (rep.workCompleted || '').toLowerCase().includes(q) ||
-      ((rep.issues || '').toLowerCase().includes(q));
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    const filters = {
+      search: searchQuery,
+      customer: customerFilter === 'All' ? '' : customerFilter,
+      shift: shiftFilter === 'All' ? '' : shiftFilter,
+      employee: employeeFilter === 'All' ? '' : employeeFilter,
+      date: dateFilter,
+      status: statusFilter === 'All' ? '' : statusFilter,
+    };
+    Promise.all([adminApi.reports.list(filters), adminApi.reports.summary(filters)])
+      .then(([rows, stats]) => {
+        if (active) {
+          setReports(rows);
+          setSummary(stats);
+          setError('');
+        }
+      })
+      .catch((requestError) => { if (active) setError(requestError.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [searchQuery, customerFilter, shiftFilter, employeeFilter, dateFilter, statusFilter]);
 
-    const matchesCustomer = customerFilter === 'All' || rep.customerId === customerFilter;
-    const matchesShift = shiftFilter === 'All' || rep.shiftId === shiftFilter;
-
-    return matchesSearch && matchesCustomer && matchesShift;
-  });
+  const filteredReports = reports;
 
   return (
     <div className="space-y-6">
@@ -70,6 +90,30 @@ export const DailyReportsMonitoring = () => {
 
         <div className="flex items-center gap-3 w-full md:w-auto flex-wrap sm:flex-nowrap">
           <select
+            value={employeeFilter}
+            onChange={(e) => setEmployeeFilter(e.target.value)}
+            className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-[#245CE2] w-full sm:w-auto"
+          >
+            <option value="All">All Employees</option>
+            {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
+          </select>
+          <input
+            aria-label="Filter reports by date"
+            type="date"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2"
+          />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700"
+          >
+            <option value="All">All statuses</option>
+            <option value="SUBMITTED">Submitted</option>
+            <option value="DRAFT">Pending</option>
+          </select>
+          <select
             value={customerFilter}
             onChange={(e) => setCustomerFilter(e.target.value)}
             className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-[#245CE2] w-full sm:w-auto"
@@ -97,8 +141,28 @@ export const DailyReportsMonitoring = () => {
         </div>
       </div>
 
+      {error && <div role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{error}</div>}
+      {summary && (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="rounded-xl bg-white border border-slate-200 p-3">Daily: <b>{summary.daily.total}</b></div>
+            <div className="rounded-xl bg-white border border-slate-200 p-3">Submitted: <b>{summary.daily.submitted}</b></div>
+            <div className="rounded-xl bg-white border border-slate-200 p-3">Pending: <b>{summary.daily.pending}</b></div>
+            <div className="rounded-xl bg-white border border-slate-200 p-3">Updated: <b>{summary.daily.updated}</b></div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="rounded-xl bg-blue-50 border border-blue-100 p-3">Overall: <b>{summary.overall.total}</b></div>
+            <div className="rounded-xl bg-blue-50 border border-blue-100 p-3">Submitted: <b>{summary.overall.submitted}</b></div>
+            <div className="rounded-xl bg-blue-50 border border-blue-100 p-3">Pending: <b>{summary.overall.pending}</b></div>
+            <div className="rounded-xl bg-blue-50 border border-blue-100 p-3">Updated: <b>{summary.overall.updated}</b></div>
+          </div>
+        </>
+      )}
+      {loading && <div role="status" className="text-xs text-slate-500">Loading daily reports...</div>}
+
       {/* Reports Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {!loading && filteredReports.length === 0 && <div className="col-span-2 rounded-xl bg-white p-8 text-center text-xs text-slate-500">No reports match these filters.</div>}
         {filteredReports.map((rep) => {
           const hasComments = rep.comments && rep.comments.length > 0;
           const hasAttachments = rep.attachments && rep.attachments.length > 0;

@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
-import { useAuth } from '../../context/AuthContext';
-import { useApp } from '../../context/AppContext';
+import React, { useEffect, useState } from 'react';
+import { adminApi } from '../../services/adminApi';
 import { ReportDetailModal } from '../../components/modals/ReportDetailModal';
 import {
   MessageSquare,
@@ -13,41 +12,52 @@ import {
 } from 'lucide-react';
 
 export const EmployeeFeedback = () => {
-  const { selectedEmployeeId } = useAuth();
-  const { reports, employees, replyToComment } = useApp();
-
-  const currentEmp = employees.find((e) => e.id === selectedEmployeeId) || employees[0];
+  const [feedbackList, setFeedbackList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busyCommentId, setBusyCommentId] = useState(null);
   const [replyTextMap, setReplyTextMap] = useState({});
   const [selectedReport, setSelectedReport] = useState(null);
 
-  // Collect all feedback on reports submitted by this employee
-  const feedbackList = [];
-  reports
-    .filter((r) => r.employeeId === currentEmp.id)
-    .forEach((rep) => {
-      (rep.comments || []).forEach((cmt) => {
-        feedbackList.push({
-          ...cmt,
-          reportId: rep.id,
-          reportCustomer: rep.customerName,
-          reportShift: rep.shiftName,
-          reportDate: rep.reportingDate,
-          fullReport: rep,
-        });
-      });
-    });
+  const loadFeedback = async () => {
+    const [reports, comments] = await Promise.all([adminApi.reports.list(), adminApi.reports.allComments()]);
+    const reportsById = new Map(reports.map((report) => [report.id, report]));
+    setFeedbackList(comments.flatMap((comment) => {
+      const report = reportsById.get(comment.daily_report);
+      return report ? [{
+        ...comment,
+        reportId: report.id,
+        reportCustomer: report.customerName,
+        reportShift: report.shiftName,
+        reportDate: report.reportingDate,
+        fullReport: report,
+      }] : [];
+    }));
+  };
 
-  const handleSendReply = (reportId, commentId) => {
+  useEffect(() => {
+    let active = true;
+    loadFeedback()
+      .then(() => { if (active) setError(''); })
+      .catch((requestError) => { if (active) setError(requestError.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const handleSendReply = async (commentId) => {
     const text = replyTextMap[commentId];
     if (!text || !text.trim()) return;
-
-    replyToComment(reportId, commentId, {
-      authorName: currentEmp.name,
-      authorRole: `Employee (${currentEmp.roleTitle})`,
-      message: text.trim(),
-    });
-
-    setReplyTextMap((prev) => ({ ...prev, [commentId]: '' }));
+    setBusyCommentId(commentId);
+    try {
+      await adminApi.reports.reply(commentId, text.trim());
+      await loadFeedback();
+      setReplyTextMap((prev) => ({ ...prev, [commentId]: '' }));
+      setError('');
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setBusyCommentId(null);
+    }
   };
 
   return (
@@ -62,6 +72,9 @@ export const EmployeeFeedback = () => {
           Review inquiries, remarks, and feedback from client customers regarding your submitted shift reports.
         </p>
       </div>
+
+      {error && <div role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{error}</div>}
+      {loading && <div role="status" className="text-xs text-slate-500">Loading customer feedback...</div>}
 
       {/* Threads List */}
       <div className="space-y-5">
@@ -150,8 +163,8 @@ export const EmployeeFeedback = () => {
                     className="flex-1 px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#245CE2] focus:bg-white"
                   />
                   <button
-                    onClick={() => handleSendReply(item.reportId, item.id)}
-                    disabled={!replyTextMap[item.id]?.trim()}
+                    onClick={() => handleSendReply(item.id)}
+                    disabled={!replyTextMap[item.id]?.trim() || busyCommentId === item.id}
                     className="px-4 py-2 bg-[#245CE2] hover:bg-[#1A45B0] disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
                   >
                     <Send className="w-3.5 h-3.5" />

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useApp } from '../../context/AppContext';
+import React, { useEffect, useState } from 'react';
+import { adminApi } from '../../services/adminApi';
 import { Badge } from '../../components/common/Badge';
 import { ReportDetailModal } from '../../components/modals/ReportDetailModal';
 import {
@@ -14,27 +14,40 @@ import {
 } from 'lucide-react';
 
 export const FeedbackMonitoring = () => {
-  const { reports } = useApp();
+  const [feedbackItems, setFeedbackItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedReport, setSelectedReport] = useState(null);
 
-  // Extract all comments across all reports
-  const allFeedbackItems = [];
-  reports.forEach((rep) => {
-    (rep.comments || []).forEach((cmt) => {
-      allFeedbackItems.push({
-        ...cmt,
-        reportId: rep.id,
-        reportShift: rep.shiftName,
-        customerName: rep.customerName,
-        employeeName: rep.employeeName,
-        reportingDate: rep.reportingDate,
-        fullReport: rep,
-      });
-    });
-  });
+  useEffect(() => {
+    let active = true;
+    Promise.all([adminApi.reports.list(), adminApi.reports.allComments()])
+      .then(([reports, comments]) => {
+        const reportsById = new Map(reports.map((report) => [report.id, report]));
+        const items = comments.flatMap((comment) => {
+          const report = reportsById.get(comment.daily_report);
+          return report ? [{
+            ...comment,
+            reportId: report.id,
+            reportShift: report.shiftName,
+            customerName: report.customerName,
+            employeeName: report.employeeName,
+            reportingDate: report.reportingDate,
+            fullReport: report,
+          }] : [];
+        });
+        if (active) {
+          setFeedbackItems(items);
+          setError('');
+        }
+      })
+      .catch((requestError) => { if (active) setError(requestError.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
 
-  const filteredItems = allFeedbackItems.filter((item) => {
+  const filteredItems = feedbackItems.filter((item) => {
     const q = (searchQuery || '').toLowerCase();
     return (
       (item.authorName || '').toLowerCase().includes(q) ||
@@ -58,6 +71,9 @@ export const FeedbackMonitoring = () => {
           </p>
         </div>
       </div>
+
+      {error && <div role="alert" className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">{error}</div>}
+      {loading && <div role="status" className="text-xs text-slate-500">Loading feedback threads...</div>}
 
       {/* Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-subtle flex items-center justify-between">

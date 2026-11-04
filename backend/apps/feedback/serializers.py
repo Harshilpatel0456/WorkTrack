@@ -20,7 +20,7 @@ class CommentReplySerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'author', 'author_name', 'author_role', 'is_edited', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'parent_comment', 'author', 'author_name', 'author_role', 'is_edited', 'created_at', 'updated_at']
 
 
 class ReportCommentSerializer(serializers.ModelSerializer):
@@ -43,5 +43,9 @@ class ReportCommentSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'author', 'author_name', 'author_role', 'is_edited', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'parent_comment', 'author', 'author_name', 'author_role', 'is_edited', 'created_at', 'updated_at']
 
+    def validate_content(self, value):
+        if not value.strip():
+            raise serializers.ValidationError('Comment content is required.')
+        return value.strip()

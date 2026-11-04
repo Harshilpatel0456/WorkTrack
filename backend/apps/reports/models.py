@@ -65,6 +65,7 @@ class ReportVersion(models.Model):
     version_number = models.IntegerField()
     title_snapshot = models.CharField(max_length=255)
     content_snapshot = models.JSONField()
+    previous_content_snapshot = models.JSONField(blank=True, null=True)
     modified_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT
@@ -81,6 +82,9 @@ class ReportVersion(models.Model):
                 fields=['daily_report', 'version_number'],
                 name='unique_report_version'
             )
+        ]
+        indexes = [
+            models.Index(fields=['daily_report', 'modified_at']),
         ]
 
     def __str__(self):

@@ -98,16 +98,20 @@ Currently, all business logic and data persistence are simulated using React Con
 [Shift Scheduled]
        │
        ▼
-[Employee Logs In] ──▶ Calls POST /api/v1/attendance/check-in/
-                           ├── Validates: Assigned to active shift today
-                           ├── Validates: No existing open check-in
-                           └── Creates Attendance record with check_in = timezone.now(), status = 'PRESENT'
+[Employee Logs In] ──▶ Calls POST /api/v1/attendance/check_in/
+                           ├── Validates: Authenticated employee owns an active shift assignment
+                           ├── Validates: Current time is inside the shift window (customer timezone)
+                           ├── Applies the shift's grace period to choose PRESENT or LATE
+                           └── Stores check_in in UTC against the shift start date
        │
        ▼
-[Shift Completion] ──▶ Calls POST /api/v1/attendance/check-out/
-                           ├── Validates: Active check-in exists
-                           ├── Validates: check_out > check_in
-                           └── Updates Attendance with check_out = timezone.now(), calculates duration_hours
+[Shift Completion] ──▶ Calls POST /api/v1/attendance/check_out/
+                           ├── Validates: Same assigned employee, existing check-in, and shift end reached
+                           └── Stores UTC check_out and actual duration_hours
+
+[Shift End Without Punch] ──▶ Marks no-punch shifts ABSENT and open punches INCOMPLETE
+[Admin Correction] ──▶ PATCH /api/v1/attendance/{id}/correct/ with before/after ActivityLog audit
+[Customer Dashboard] ──▶ Reads customer-shifts and daily/overall summary through customer-scoped APIs
 ```
 
 ### 4.2 Daily Shift Report Submission & Version Snapshotting
@@ -160,4 +164,3 @@ When integrating the React frontend with the Django API:
 2. Create `src/services/apiClient.js` with Axios interceptors to automatically attach `Authorization: Bearer <token>` and handle silent token refresh via `POST /api/v1/auth/refresh/`.
 3. Update `src/context/AppContext.jsx` to fetch real data from Django endpoints on mount and persona change.
 4. Keep `localStorage` strictly for non-sensitive local UI state (such as the collapsible sidebar collapsed/expanded preference `worktrack_sidebar_collapsed`).
-

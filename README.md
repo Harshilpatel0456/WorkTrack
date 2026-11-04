@@ -32,7 +32,7 @@ All formal architecture, SRS, database, API, and engineering specifications are 
 | [SECURITY_GUIDELINES.md](docs/SECURITY_GUIDELINES.md) | IDOR defenses, role isolation, password hashing, and CORS/CSRF safeguards |
 | [TESTING_STRATEGY.md](docs/TESTING_STRATEGY.md) | Automated testing plan using pytest (19/19 passing test suite) |
 | [DEVELOPMENT_SETUP.md](docs/DEVELOPMENT_SETUP.md) | Windows development guide for setting up Node, Python, and PostgreSQL |
-| [DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) | Production deployment architecture, Gunicorn, Nginx, HTTPS, and S3 |
+| [DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) | Production deployment with Docker Compose, Gunicorn, Nginx, HTTPS, and backups |
 | [DEVELOPMENT_ROADMAP.md](docs/DEVELOPMENT_ROADMAP.md) | Phased implementation schedule, milestones, and status indicators |
 | [CODING_GUIDELINES.md](docs/CODING_GUIDELINES.md) | PEP 8, DRF conventions, React component standards, and Git conventions |
 | [CHANGELOG.md](docs/CHANGELOG.md) | Semantic version release history and completed deliverables |

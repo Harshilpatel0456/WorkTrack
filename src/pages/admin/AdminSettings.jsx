@@ -161,7 +161,7 @@ export const AdminSettings = () => {
           Prototype Data Reset Control
         </div>
         <p className="text-xs text-rose-900 leading-relaxed">
-          Need a fresh start for a new faculty presentation? Resetting will re-initialize all LocalStorage demo datasets back to default initial records (sample employees, customers, shifts, attendance, and versions).
+          Need a fresh start for a new faculty presentation? Resetting will re-initialize the LocalStorage demo datasets (sample employees, customers, shifts, and reports). Attendance remains managed by the backend.
         </p>
 
         <div className="pt-2">

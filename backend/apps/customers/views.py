@@ -53,7 +53,12 @@ class CustomerViewSet(viewsets.ModelViewSet):
         customer.user.save(update_fields=['is_active'])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    @action(
+        detail=False,
+        methods=['get'],
+        permission_classes=[permissions.IsAuthenticated],
+        url_path='my-employees',
+    )
     def my_employees(self, request):
         customer = getattr(request.user, 'customer_profile', None)
         if not customer:

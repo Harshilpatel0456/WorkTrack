@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
+import { NotificationProvider } from './context/NotificationContext';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
 
@@ -25,7 +26,7 @@ import { ShiftManagement } from './pages/admin/ShiftManagement';
 import { AttendanceMonitoring } from './pages/admin/AttendanceMonitoring';
 import { DailyReportsMonitoring } from './pages/admin/DailyReportsMonitoring';
 import { FeedbackMonitoring } from './pages/admin/FeedbackMonitoring';
-import { AdminNotifications } from './pages/admin/AdminNotifications';
+import { NotificationCenter as AdminNotifications } from './components/notifications/NotificationCenter';
 import { AdminSettings } from './pages/admin/AdminSettings';
 
 // Employee Pages
@@ -36,7 +37,7 @@ import { EmployeeAttendance } from './pages/employee/EmployeeAttendance';
 import { DailyReportForm } from './pages/employee/DailyReportForm';
 import { ReportHistory } from './pages/employee/ReportHistory';
 import { EmployeeFeedback } from './pages/employee/EmployeeFeedback';
-import { EmployeeNotifications } from './pages/employee/EmployeeNotifications';
+import { NotificationCenter as EmployeeNotifications } from './components/notifications/NotificationCenter';
 import { EmployeeProfile } from './pages/employee/EmployeeProfile';
 
 // Customer Pages
@@ -46,8 +47,8 @@ import { CustomerAssignedEmployees } from './pages/customer/CustomerAssignedEmpl
 import { CustomerDailyReports } from './pages/customer/CustomerDailyReports';
 import { CustomerShiftReports } from './pages/customer/CustomerShiftReports';
 import { CustomerFeedback } from './pages/customer/CustomerFeedback';
-import { CustomerNotifications } from './pages/customer/CustomerNotifications';
-import { CustomerNotificationSettings } from './pages/customer/CustomerNotificationSettings';
+import { NotificationCenter as CustomerNotifications } from './components/notifications/NotificationCenter';
+import { NotificationPreferences as CustomerNotificationSettings } from './components/notifications/NotificationPreferences';
 import { CustomerProfile } from './pages/customer/CustomerProfile';
 
 // Root redirect helper
@@ -65,8 +66,9 @@ function App() {
   return (
     <AuthProvider>
       <AppProvider>
-        <BrowserRouter>
-          <ErrorBoundary>
+        <NotificationProvider>
+          <BrowserRouter>
+            <ErrorBoundary>
             <Routes>
               {/* Index & Auth Pages */}
               <Route path="/" element={<RootRedirect />} />
@@ -126,8 +128,9 @@ function App() {
               {/* Catch-all */}
               <Route path="*" element={<RootRedirect />} />
             </Routes>
-          </ErrorBoundary>
-        </BrowserRouter>
+            </ErrorBoundary>
+          </BrowserRouter>
+        </NotificationProvider>
       </AppProvider>
     </AuthProvider>
   );

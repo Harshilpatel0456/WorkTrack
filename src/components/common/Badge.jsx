@@ -14,16 +14,22 @@ export const Badge = ({ status, variant, className = '' }) => {
     }
 
     const s = String(status || '').toLowerCase();
-    if (s.includes('active') || s.includes('approved') || s.includes('checked in') || s.includes('submitted')) {
+    if (s.includes('active') || s.includes('approved') || s.includes('checked in') || s.includes('submitted') || s.includes('present')) {
       return 'bg-emerald-50 text-emerald-700 border-emerald-200';
     }
     if (s.includes('checked out') || s.includes('completed')) {
       return 'bg-blue-50 text-blue-700 border-blue-200';
     }
+    if (s.includes('incomplete') || s.includes('absent') || s.includes('missed')) {
+      return 'bg-rose-50 text-rose-700 border-rose-200';
+    }
+    if (s.includes('late')) {
+      return 'bg-amber-50 text-amber-700 border-amber-200';
+    }
     if (s.includes('scheduled') || s.includes('pending') || s.includes('draft') || s.includes('review')) {
       return 'bg-amber-50 text-amber-700 border-amber-200';
     }
-    if (s.includes('inactive') || s.includes('suspended') || s.includes('missed') || s.includes('revoked') || s.includes('rejected')) {
+    if (s.includes('inactive') || s.includes('suspended') || s.includes('revoked') || s.includes('rejected')) {
       return 'bg-rose-50 text-rose-700 border-rose-200';
     }
     return 'bg-slate-100 text-slate-700 border-slate-200';
@@ -31,7 +37,7 @@ export const Badge = ({ status, variant, className = '' }) => {
 
   const getDotClass = () => {
     const s = String(status || '').toLowerCase();
-    if (s.includes('active') || s.includes('approved') || s.includes('checked in') || s.includes('submitted')) {
+    if (s.includes('active') || s.includes('approved') || s.includes('checked in') || s.includes('submitted') || s.includes('present')) {
       return 'bg-emerald-500';
     }
     if (s.includes('checked out') || s.includes('completed')) {
@@ -40,7 +46,10 @@ export const Badge = ({ status, variant, className = '' }) => {
     if (s.includes('scheduled') || s.includes('pending') || s.includes('draft')) {
       return 'bg-amber-500';
     }
-    if (s.includes('inactive') || s.includes('suspended') || s.includes('missed') || s.includes('revoked')) {
+    if (s.includes('late')) {
+      return 'bg-amber-500';
+    }
+    if (s.includes('inactive') || s.includes('suspended') || s.includes('missed') || s.includes('incomplete') || s.includes('absent') || s.includes('revoked')) {
       return 'bg-rose-500';
     }
     return 'bg-slate-400';

@@ -8,10 +8,7 @@ export const AppProvider = ({ children }) => {
   const [employees, setEmployees] = useState(() => storageService.getEmployees());
   const [shifts, setShifts] = useState(() => storageService.getShifts());
   const [assignments, setAssignments] = useState(() => storageService.getAssignments());
-  const [attendance, setAttendance] = useState(() => storageService.getAttendance());
-  const [reports, setReports] = useState(() => storageService.getReports());
-  const [notifications, setNotifications] = useState(() => storageService.getNotifications());
-  const [notificationSettings, setNotificationSettings] = useState(() => storageService.getNotificationSettings());
+  const [reports, setReports] = useState([]);
   const [cameras, setCameras] = useState(() => storageService.getCameras());
   const [surveillanceBatches, setSurveillanceBatches] = useState(() => storageService.getSurveillanceBatches());
   const [toast, setToast] = useState(null);
@@ -40,10 +37,6 @@ export const AppProvider = ({ children }) => {
   useEffect(() => { storageService.saveEmployees(employees); }, [employees]);
   useEffect(() => { storageService.saveShifts(shifts); }, [shifts]);
   useEffect(() => { storageService.saveAssignments(assignments); }, [assignments]);
-  useEffect(() => { storageService.saveAttendance(attendance); }, [attendance]);
-  useEffect(() => { storageService.saveReports(reports); }, [reports]);
-  useEffect(() => { storageService.saveNotifications(notifications); }, [notifications]);
-  useEffect(() => { storageService.saveNotificationSettings(notificationSettings); }, [notificationSettings]);
   useEffect(() => { storageService.saveCameras(cameras); }, [cameras]);
   useEffect(() => { storageService.saveSurveillanceBatches(surveillanceBatches); }, [surveillanceBatches]);
 
@@ -55,25 +48,7 @@ export const AppProvider = ({ children }) => {
     }, 4000);
   };
 
-  // Helper to trigger simulated notification
-  const triggerNotification = ({ targetRole, targetId, targetCustomerId, targetEmployeeId, type, title, message, link, meta }) => {
-    const newNotif = {
-      id: `notif-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      targetRole,
-      targetId: targetId || (targetRole === 'admin' ? 'admin' : undefined),
-      targetCustomerId,
-      targetEmployeeId,
-      type,
-      title,
-      message,
-      timestamp: new Date().toISOString(),
-      isRead: false,
-      link: link || '#',
-      meta: meta || {},
-    };
-
-    setNotifications(prev => [newNotif, ...prev]);
-  };
+  const triggerNotification = () => {};
 
   // ================= EMPLOYEES =================
   const addEmployee = (empData) => {
@@ -256,101 +231,6 @@ export const AppProvider = ({ children }) => {
       return a;
     }));
     showToast(`Assignment marked as ${newStatus}`);
-  };
-
-  // ================= ATTENDANCE =================
-  const checkInEmployee = (employeeId) => {
-    const today = new Date().toISOString().split('T')[0];
-    const nowTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-
-    // Check if already checked in today for active shift
-    const existing = attendance.find(a => a.employeeId === employeeId && a.date === today);
-
-    if (existing && existing.status === 'Checked In') {
-      showToast('You are already checked in for today!', 'warning');
-      return { success: false, error: 'Already checked in' };
-    }
-
-    if (existing && existing.status === 'Checked Out') {
-      showToast('You have already checked out for your shift today.', 'warning');
-      return { success: false, error: 'Shift already ended' };
-    }
-
-    const employee = employees.find(e => e.id === employeeId);
-    const empAssignments = assignments.filter(a => a.employeeId === employeeId && a.status === 'Approved');
-    const primaryAssignment = empAssignments[0];
-    const shift = shifts.find(s => s.id === (primaryAssignment ? primaryAssignment.shiftId : employee?.currentShiftId)) || shifts[0];
-
-    const newRecord = {
-      id: existing ? existing.id : `att-${Date.now()}`,
-      employeeId,
-      employeeName: employee ? employee.name : 'Employee',
-      customerId: primaryAssignment ? primaryAssignment.customerId : (employee?.assignedCustomerIds?.[0] || 'cust-1'),
-      customerName: primaryAssignment ? primaryAssignment.customerName : 'Acme Industries',
-      shiftId: shift.id,
-      shiftName: shift.name,
-      date: today,
-      checkInTime: nowTimeStr,
-      checkOutTime: null,
-      duration: 'In progress',
-      status: 'Checked In',
-      notes: 'Checked in on time via WorkTrack self-service.',
-    };
-
-    if (existing) {
-      setAttendance(prev => prev.map(a => a.id === existing.id ? newRecord : a));
-    } else {
-      setAttendance(prev => [newRecord, ...prev]);
-    }
-
-    // Trigger Admin notification
-    triggerNotification({
-      targetRole: 'admin',
-      type: 'attendance_checkin',
-      title: 'Shift Check-In Recorded',
-      message: `${employee?.name} checked into ${shift.name} at ${nowTimeStr}.`,
-      link: '/admin/attendance',
-      meta: { employee: employee?.name, time: nowTimeStr }
-    });
-
-    showToast(`Checked in successfully at ${nowTimeStr}`);
-    return { success: true, record: newRecord };
-  };
-
-  const checkOutEmployee = (employeeId) => {
-    const today = new Date().toISOString().split('T')[0];
-    const nowTimeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-
-    const existing = attendance.find(a => a.employeeId === employeeId && a.date === today);
-
-    if (!existing || existing.status !== 'Checked In') {
-      showToast('You must check in first before checking out!', 'error');
-      return { success: false, error: 'Must check in before checking out' };
-    }
-
-    // Compute approximate duration string
-    const updatedRecord = {
-      ...existing,
-      checkOutTime: nowTimeStr,
-      status: 'Checked Out',
-      duration: '8h 00m', // Calculated representation
-      notes: 'Completed shift duties and checked out.',
-    };
-
-    setAttendance(prev => prev.map(a => a.id === existing.id ? updatedRecord : a));
-
-    // Admin notification
-    triggerNotification({
-      targetRole: 'admin',
-      type: 'attendance_checkout',
-      title: 'Shift Check-Out Recorded',
-      message: `${existing.employeeName} checked out of ${existing.shiftName} at ${nowTimeStr}.`,
-      link: '/admin/attendance',
-      meta: { employee: existing.employeeName, time: nowTimeStr }
-    });
-
-    showToast(`Checked out successfully at ${nowTimeStr}`);
-    return { success: true, record: updatedRecord };
   };
 
   // ================= DAILY REPORTS =================
@@ -573,26 +453,6 @@ export const AppProvider = ({ children }) => {
     showToast('Response sent to customer');
   };
 
-  // ================= NOTIFICATIONS =================
-  const markNotificationRead = (notifId) => {
-    setNotifications(prev => prev.map(n => n.id === notifId ? { ...n, isRead: true } : n));
-  };
-
-  const markAllNotificationsRead = (role, targetId) => {
-    setNotifications(prev => prev.map(n => {
-      if (role === 'admin' && n.targetRole === 'admin') return { ...n, isRead: true };
-      if (role === 'employee' && n.targetRole === 'employee' && (!n.targetEmployeeId || n.targetEmployeeId === targetId)) return { ...n, isRead: true };
-      if (role === 'customer' && n.targetRole === 'customer' && (!n.targetCustomerId || n.targetCustomerId === targetId)) return { ...n, isRead: true };
-      return n;
-    }));
-    showToast('All notifications marked as read', 'info');
-  };
-
-  const updateNotificationSettings = (newSettings) => {
-    setNotificationSettings(newSettings);
-    showToast('Notification preferences updated');
-  };
-
   // ================= CCTV HOURLY SURVEILLANCE =================
   const updateSnapshotVerification = (batchId, snapshotId, verifiedStatus, employeeNotes) => {
     setSurveillanceBatches(prev => prev.map(b => {
@@ -641,8 +501,8 @@ export const AppProvider = ({ children }) => {
 
     // Handle customer notification based on user's exact specification:
     // "once in hour or at 6 hrs or at the day end"
-    const freq = notificationSettings.frequency || 'hourly';
-    const immediateRobberyAlert = notificationSettings.immediateAlertOnSuspicious !== false;
+    const freq = 'INSTANT';
+    const immediateRobberyAlert = true;
 
     // 1. If hourly: customer gets alert immediately for every 1-hour report
     if (freq === 'hourly') {
@@ -699,10 +559,7 @@ export const AppProvider = ({ children }) => {
         employees,
         shifts,
         assignments,
-        attendance,
         reports,
-        notifications,
-        notificationSettings,
         cameras,
         surveillanceBatches,
         toast,
@@ -721,9 +578,6 @@ export const AppProvider = ({ children }) => {
         // Assignment Actions
         createAssignment,
         updateAssignmentStatus,
-        // Attendance Actions
-        checkInEmployee,
-        checkOutEmployee,
         // Report Actions
         submitDailyReport,
         updateDailyReport,
@@ -734,9 +588,6 @@ export const AppProvider = ({ children }) => {
         updateSnapshotVerification,
         submitHourlySurveillanceBatch,
         // Notification Actions
-        markNotificationRead,
-        markAllNotificationsRead,
-        updateNotificationSettings,
         triggerNotification,
         // Demo
         resetDemoData,

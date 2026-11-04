@@ -1,5 +1,6 @@
 from rest_framework import status, views, permissions, generics
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
@@ -18,6 +19,8 @@ class LoginView(TokenObtainPairView):
     Authenticates a user via email and password, issuing JWT access and refresh tokens.
     """
     serializer_class = CustomTokenObtainPairSerializer
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'login'
 
 
 class RegisterView(generics.CreateAPIView):
@@ -27,6 +30,8 @@ class RegisterView(generics.CreateAPIView):
     """
     serializer_class = UserRegistrationSerializer
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'registration'
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -67,6 +72,11 @@ class LogoutView(views.APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             token = RefreshToken(refresh_token)
+            if str(token.get('user_id')) != str(request.user.pk):
+                return Response(
+                    {'error': 'Invalid or expired token.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             token.blacklist()
             return Response(
                 {'message': 'Successfully logged out.'},
@@ -120,6 +130,8 @@ class PasswordResetRequestView(views.APIView):
     Returns a generic message to prevent email enumeration.
     """
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password_reset'
 
     def post(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data)
@@ -136,6 +148,8 @@ class PasswordResetConfirmView(views.APIView):
     Accepts uid, token, new_password, and confirm_password to set a new password.
     """
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password_reset_confirm'
 
     def post(self, request):
         serializer = PasswordResetConfirmSerializer(data=request.data)
