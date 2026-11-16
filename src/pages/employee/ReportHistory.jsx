@@ -44,12 +44,12 @@ export const ReportHistory = () => {
   const myReports = reports;
 
   const filteredReports = myReports.filter((rep) => {
-    return (
-      (rep.customerName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (rep.shiftName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (rep.workCompleted || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (rep.reportingDate || '').includes(searchQuery)
-    );
+    const cust = (rep.customerName || rep.customer_name || '').toLowerCase();
+    const shift = (rep.shiftName || rep.shift_name || '').toLowerCase();
+    const work = (rep.workCompleted || rep.work_summary || '').toLowerCase();
+    const date = rep.reportingDate || rep.shift_date || '';
+    const q = searchQuery.toLowerCase();
+    return cust.includes(q) || shift.includes(q) || work.includes(q) || date.includes(q);
   });
 
   return (
@@ -116,13 +116,13 @@ export const ReportHistory = () => {
                     <div>
                       <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
                         <Building2 className="w-4 h-4 text-[#245CE2]" />
-                        {rep.customerName}
+                        {rep.customerName || rep.customer_name}
                       </h3>
                       <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
                         <Clock className="w-3.5 h-3.5 text-amber-500" />
-                        <span>{rep.shiftName}</span>
+                        <span>{rep.shiftName || rep.shift_name}</span>
                         <span>•</span>
-                        <span>{rep.reportingDate}</span>
+                        <span>{rep.reportingDate || rep.shift_date}</span>
                       </div>
                     </div>
 
@@ -145,14 +145,14 @@ export const ReportHistory = () => {
                       Summary of Work
                     </span>
                     <p className="line-clamp-3 leading-relaxed whitespace-pre-line font-sans">
-                      {rep.workCompleted}
+                      {rep.workCompleted || rep.work_summary}
                     </p>
                   </div>
 
-                  {rep.issues && (
+                  {(rep.issues || rep.issues_or_blockers) && (
                     <div className="p-2.5 rounded-lg bg-rose-50/60 border border-rose-100 text-xs text-rose-900">
                       <span className="font-bold text-[10px] uppercase block text-rose-700">Flagged Issue:</span>
-                      <p className="line-clamp-1">{rep.issues}</p>
+                      <p className="line-clamp-1">{rep.issues || rep.issues_or_blockers}</p>
                     </div>
                   )}
                 </div>

@@ -99,7 +99,7 @@ export const CustomerOverview = () => {
 
   // Customer-scoped APIs return only this account's data.
   const customerReports = reports;
-  const reportsToday = customerReports.filter((r) => r.reportingDate === todayDateStr);
+  const reportsToday = customerReports.filter((r) => r.reportingDate === todayDateStr || r.shift_date === todayDateStr);
 
   const activeAssignments = customerAssignments.filter((assignment) => assignment.status === 'ACTIVE');
   const todaysSchedules = schedules.filter(
@@ -120,7 +120,9 @@ export const CustomerOverview = () => {
   const shiftActivity = shifts.filter((shift) => activeShiftIds.includes(shift.id)).map((shift) => {
     const assignedStaff = todaysSchedules.filter((schedule) => schedule.shiftId === shift.id);
     const shiftReport = customerReports.find(
-      (r) => r.shiftId === shift.id && r.reportingDate === todayDateStr
+      (r) =>
+        (r.shiftId === shift.id || r.shift_details?.shiftId === shift.id || r.shift_name === shift.name) &&
+        (r.reportingDate === todayDateStr || r.shift_date === todayDateStr)
     );
     const shiftAttendance = attendanceRecords.find(
       (att) => att.shift_id === shift.id
@@ -380,9 +382,9 @@ export const CustomerOverview = () => {
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-900">{rep.employeeName}</span>
-                    <span className="text-[11px] text-slate-400">• {rep.shiftName}</span>
-                    <span className="text-[11px] text-slate-400 font-mono">• {rep.reportingDate}</span>
+                    <span className="text-xs font-bold text-slate-900">{rep.employeeName || rep.employee_name}</span>
+                    <span className="text-[11px] text-slate-400">• {rep.shiftName || rep.shift_name}</span>
+                    <span className="text-[11px] text-slate-400 font-mono">• {rep.reportingDate || rep.shift_date}</span>
                     {rep.version > 1 && (
                       <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-100 text-[#245CE2]">
                         v{rep.version}
@@ -390,14 +392,14 @@ export const CustomerOverview = () => {
                     )}
                   </div>
                   <p className="text-xs text-slate-600 mt-1 line-clamp-2 leading-relaxed">
-                    {rep.workCompleted}
+                    {rep.workCompleted || rep.work_summary}
                   </p>
                 </div>
 
                 <div className="text-right flex-shrink-0">
                   <Badge status={rep.status} />
                   <p className="text-[10px] text-slate-400 mt-1">
-                    {new Date(rep.updatedAt || rep.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {(rep.updatedAt || rep.updated_at || rep.createdAt || rep.created_at) ? new Date(rep.updatedAt || rep.updated_at || rep.createdAt || rep.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                   </p>
                 </div>
               </div>

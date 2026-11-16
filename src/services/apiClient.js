@@ -142,13 +142,13 @@ export const authApi = {
     });
   },
 
-  changePassword: async ({ oldPassword, newPassword, confirmNewPassword }) => {
+  changePassword: async ({ oldPassword, newPassword, confirmNewPassword, confirmPassword }) => {
     return apiClient('/auth/change-password/', {
       method: 'POST',
       body: JSON.stringify({
         old_password: oldPassword,
         new_password: newPassword,
-        confirm_new_password: confirmNewPassword,
+        confirm_password: confirmPassword || confirmNewPassword,
       }),
     });
   },
@@ -160,14 +160,14 @@ export const authApi = {
     });
   },
 
-  confirmPasswordReset: async ({ uid, token, newPassword, confirmNewPassword }) => {
+  confirmPasswordReset: async ({ uid, token, newPassword, confirmNewPassword, confirmPassword }) => {
     return apiClient('/auth/password-reset/confirm/', {
       method: 'POST',
       body: JSON.stringify({
         uid,
         token,
         new_password: newPassword,
-        confirm_new_password: confirmNewPassword,
+        confirm_password: confirmPassword || confirmNewPassword,
       }),
     });
   },

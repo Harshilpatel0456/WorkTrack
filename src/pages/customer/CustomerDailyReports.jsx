@@ -70,14 +70,20 @@ export const CustomerDailyReports = () => {
   const assignedEmployeeIds = employees.map((employee) => employee.id);
 
   const filteredReports = customerReports.filter((rep) => {
-    const matchesSearch =
-      (rep.employeeName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (rep.workCompleted || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (rep.issues || '').toLowerCase().includes(searchQuery.toLowerCase());
+    const empName = rep.employeeName || rep.employee_name || '';
+    const work = rep.workCompleted || rep.work_summary || '';
+    const issues = rep.issues || rep.issues_or_blockers || '';
+    const repShiftId = rep.shiftId || rep.shift_details?.shiftId || rep.shift_assignment;
+    const repDate = rep.reportingDate || rep.shift_date || '';
 
-    const matchesEmployee = employeeFilter === 'All' || rep.employeeId === employeeFilter;
-    const matchesShift = shiftFilter === 'All' || rep.shiftId === shiftFilter;
-    const matchesDate = !dateFilter || rep.reportingDate === dateFilter;
+    const matchesSearch =
+      empName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      work.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      issues.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesEmployee = employeeFilter === 'All' || rep.employeeId === employeeFilter || rep.shift_details?.employeeId === employeeFilter;
+    const matchesShift = shiftFilter === 'All' || repShiftId === shiftFilter;
+    const matchesDate = !dateFilter || repDate === dateFilter;
 
     return matchesSearch && matchesEmployee && matchesShift && matchesDate;
   });
@@ -92,7 +98,7 @@ export const CustomerDailyReports = () => {
             Client Daily Operational Shift Reports
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Complete archive of work completed, task handovers, flagged challenges, and documentation for {currentCust.companyName}.
+            Complete archive of work completed, task handovers, flagged challenges, and documentation for {currentCust?.companyName || 'your organization'}.
           </p>
         </div>
       </div>
@@ -195,12 +201,12 @@ export const CustomerDailyReports = () => {
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-900 text-sm">{rep.employeeName}</span>
-                        <span className="text-[11px] text-slate-400 font-mono">• {rep.reportingDate}</span>
+                        <span className="font-bold text-slate-900 text-sm">{rep.employeeName || rep.employee_name}</span>
+                        <span className="text-[11px] text-slate-400 font-mono">• {rep.reportingDate || rep.shift_date}</span>
                       </div>
                       <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
                         <Clock className="w-3.5 h-3.5 text-[#245CE2]" />
-                        <span>{rep.shiftName}</span>
+                        <span>{rep.shiftName || rep.shift_name}</span>
                       </div>
                     </div>
 
@@ -224,28 +230,28 @@ export const CustomerDailyReports = () => {
                         Work Completed During Shift
                       </span>
                       <p className="text-slate-700 line-clamp-3 leading-relaxed whitespace-pre-line bg-slate-50 p-2.5 rounded-lg border border-slate-100 font-sans">
-                        {rep.workCompleted}
+                        {rep.workCompleted || rep.work_summary}
                       </p>
                     </div>
 
-                    {rep.pendingTasks && (
+                    {(rep.pendingTasks || rep.pending_tasks) && (
                       <div>
                         <span className="font-bold text-amber-700 uppercase tracking-wider text-[10px] block mb-1">
                           Tasks Handed Over
                         </span>
                         <p className="text-amber-950 line-clamp-2 leading-relaxed bg-amber-50/50 p-2 rounded-lg border border-amber-100">
-                          {rep.pendingTasks}
+                          {rep.pendingTasks || rep.pending_tasks}
                         </p>
                       </div>
                     )}
 
-                    {rep.issues && (
+                    {(rep.issues || rep.issues_or_blockers) && (
                       <div>
                         <span className="font-bold text-rose-700 uppercase tracking-wider text-[10px] block mb-1">
                           Flagged Challenges / Bottlenecks
                         </span>
                         <p className="text-rose-950 line-clamp-1 leading-relaxed bg-rose-50/50 p-2 rounded-lg border border-rose-100 font-medium">
-                          {rep.issues}
+                          {rep.issues || rep.issues_or_blockers}
                         </p>
                       </div>
                     )}

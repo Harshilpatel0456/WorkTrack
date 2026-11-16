@@ -59,7 +59,7 @@ export const DailyReportForm = () => {
     startTime: primaryAssignment?.shiftStartTime || '',
     endTime: primaryAssignment?.shiftEndTime || '',
   };
-  const existingReport = reports.find((report) => report.shift_assignment === primaryAssignment?.id);
+  const existingReport = reports.find((report) => report.shift_assignment === primaryAssignment?.id || report.shiftAssignment === primaryAssignment?.id);
 
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
 
@@ -77,14 +77,14 @@ export const DailyReportForm = () => {
   useEffect(() => {
     if (existingReport) {
       setTitle(existingReport.title || '');
-      setWorkCompleted(existingReport.workCompleted || '');
-      setPendingTasks(existingReport.pendingTasks || '');
-      setIssues(existingReport.issues || '');
-      setAdditionalRemarks(existingReport.additionalRemarks || '');
+      setWorkCompleted(existingReport.workCompleted || existingReport.work_summary || '');
+      setPendingTasks(existingReport.pendingTasks || existingReport.pending_tasks || '');
+      setIssues(existingReport.issues || existingReport.issues_or_blockers || '');
+      setAdditionalRemarks(existingReport.additionalRemarks || existingReport.additional_remarks || '');
       setAttachments(existingReport.attachments || []);
       setNewFiles([]);
     } else {
-      setTitle(`Shift report - ${primaryShift.name}`);
+      setTitle(`Shift report - ${primaryShift?.name || 'Shift'}`);
       setWorkCompleted('');
       setPendingTasks('');
       setIssues('');
@@ -92,7 +92,7 @@ export const DailyReportForm = () => {
       setAttachments([]);
       setNewFiles([]);
     }
-  }, [existingReport?.id, primaryAssignment?.id]);
+  }, [existingReport?.id, primaryAssignment?.id, primaryShift?.name]);
 
   const handleAddAttachment = (event) => {
     const files = Array.from(event.target.files || []);

@@ -93,8 +93,8 @@ export const CustomerShiftReports = () => {
           // Find report for this shift and selected date
           const report = reports.find(
             (r) =>
-              r.shiftId === shift.id &&
-              r.reportingDate === selectedDate
+              (r.shiftId === shift.id || r.shift_details?.shiftId === shift.id || r.shift_name === shift.name) &&
+              (r.reportingDate === selectedDate || r.shift_date === selectedDate)
           );
 
           // Find assigned staff for this shift
@@ -155,28 +155,28 @@ export const CustomerShiftReports = () => {
                         Completed Work
                       </span>
                       <p className="text-slate-700 line-clamp-4 leading-relaxed font-sans whitespace-pre-line">
-                        {report.workCompleted}
+                        {report.workCompleted || report.work_summary}
                       </p>
                     </div>
 
-                    {report.pendingTasks && (
+                    {(report.pendingTasks || report.pending_tasks) && (
                       <div className="p-2.5 bg-amber-50/60 rounded-xl border border-amber-100">
                         <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block mb-1">
                           Handed to Next Shift:
                         </span>
                         <p className="text-amber-950 text-[11px] line-clamp-2">
-                          {report.pendingTasks}
+                          {report.pendingTasks || report.pending_tasks}
                         </p>
                       </div>
                     )}
 
-                    {report.issues && (
+                    {(report.issues || report.issues_or_blockers) && (
                       <div className="p-2.5 bg-rose-50/60 rounded-xl border border-rose-100">
                         <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wider block mb-1">
                           Incident / Bottleneck Flag:
                         </span>
                         <p className="text-rose-950 text-[11px] line-clamp-2">
-                          {report.issues}
+                          {report.issues || report.issues_or_blockers}
                         </p>
                       </div>
                     )}
@@ -192,7 +192,7 @@ export const CustomerShiftReports = () => {
               {report && (
                 <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
                   <span className="text-[10px] text-slate-400 font-medium">
-                    v{report.version} • {new Date(report.updatedAt || report.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    v{report.version || 1} • {(report.updatedAt || report.updated_at || report.createdAt || report.created_at) ? new Date(report.updatedAt || report.updated_at || report.createdAt || report.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                   </span>
 
                   <button

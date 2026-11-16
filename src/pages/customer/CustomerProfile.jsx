@@ -17,8 +17,20 @@ export const CustomerProfile = () => {
   const { selectedCustomerId } = useAuth();
   const { customers, assignments, employees } = useApp();
 
-  const currentCust = customers.find((c) => c.id === selectedCustomerId) || customers[0];
-  const activeAssignments = assignments.filter((a) => a.customerId === currentCust.id && a.status === 'Approved');
+  const currentCust = (customers && customers.length > 0)
+    ? (customers.find((c) => c.id === selectedCustomerId) || customers[0])
+    : null;
+  const activeAssignments = currentCust
+    ? assignments.filter((a) => (a.customerId === currentCust.id || a.customer === currentCust.id) && (a.status === 'Approved' || a.status === 'APPROVED' || a.status === 'ACTIVE'))
+    : [];
+
+  if (!currentCust) {
+    return (
+      <div className="bg-white rounded-3xl border border-slate-200/80 p-8 shadow-card text-center text-slate-500 text-sm">
+        No customer profile available.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -29,7 +41,7 @@ export const CustomerProfile = () => {
             className="w-24 h-24 rounded-2xl flex items-center justify-center text-white font-extrabold text-3xl shadow-lg ring-4 ring-slate-100 flex-shrink-0"
             style={{ backgroundColor: currentCust.color || '#245CE2' }}
           >
-            {currentCust.logoLetter || currentCust.companyName.charAt(0)}
+            {currentCust.logoLetter || (currentCust.companyName ? currentCust.companyName.charAt(0) : 'C')}
           </div>
 
           <div className="flex-1 min-w-0">
@@ -37,35 +49,35 @@ export const CustomerProfile = () => {
               <h2 className="text-2xl font-black text-slate-900 tracking-tight">
                 {currentCust.companyName}
               </h2>
-              <Badge status={currentCust.accountStatus} />
+              <Badge status={currentCust.accountStatus || 'ACTIVE'} />
             </div>
 
             <p className="text-xs font-semibold text-[#245CE2] mt-1">
-              {currentCust.industry} • Enterprise Client Account
+              {currentCust.industry || 'Client'} • Enterprise Client Account
             </p>
 
             <div className="mt-4 flex flex-wrap justify-center sm:justify-start gap-4 text-xs text-slate-500">
               <span className="flex items-center gap-1.5">
                 <Users className="w-3.5 h-3.5 text-slate-400" />
-                Contact: <strong className="text-slate-800">{currentCust.contactPerson}</strong>
+                Contact: <strong className="text-slate-800">{currentCust.contactPerson || 'N/A'}</strong>
               </span>
               <span className="flex items-center gap-1.5 font-mono">
                 <Mail className="w-3.5 h-3.5 text-slate-400" />
-                {currentCust.email}
+                {currentCust.email || 'N/A'}
               </span>
               <span className="flex items-center gap-1.5">
                 <Phone className="w-3.5 h-3.5 text-slate-400" />
-                {currentCust.phone}
+                {currentCust.phone || 'N/A'}
               </span>
               <span className="flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                Client Since {currentCust.joinedDate}
+                Client Since {currentCust.joinedDate || 'N/A'}
               </span>
             </div>
 
             <div className="mt-3 flex items-center justify-center sm:justify-start gap-1.5 text-xs text-slate-600">
               <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-              <span>{currentCust.address}</span>
+              <span>{currentCust.address || 'Address on file'}</span>
             </div>
           </div>
         </div>
@@ -80,21 +92,28 @@ export const CustomerProfile = () => {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {activeAssignments.map((asg) => {
-            const emp = employees.find((e) => e.id === asg.employeeId);
+            const emp = employees.find((e) => e.id === asg.employeeId || e.id === asg.employee);
+            const shiftLabel = (asg.shiftName || asg.shift_name || asg.designation || 'Active Shift').split('(')[0].trim();
             return (
               <div
                 key={asg.id}
                 className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs"
               >
                 <div className="flex items-center gap-3">
-                  <img
-                    src={emp?.avatar}
-                    alt={asg.employeeName}
-                    className="w-9 h-9 rounded-full object-cover ring-1 ring-slate-200"
-                  />
+                  {emp?.avatar ? (
+                    <img
+                      src={emp.avatar}
+                      alt={asg.employeeName || 'Employee'}
+                      className="w-9 h-9 rounded-full object-cover ring-1 ring-slate-200"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full bg-slate-200 text-slate-600 font-bold flex items-center justify-center text-xs">
+                      {(asg.employeeName || 'E').charAt(0)}
+                    </div>
+                  )}
                   <div>
-                    <span className="font-bold text-slate-900 block">{asg.employeeName}</span>
-                    <span className="text-slate-500 text-[11px]">{asg.shiftName.split('(')[0]}</span>
+                    <span className="font-bold text-slate-900 block">{asg.employeeName || emp?.name || 'Staff Member'}</span>
+                    <span className="text-slate-500 text-[11px]">{shiftLabel}</span>
                   </div>
                 </div>
 

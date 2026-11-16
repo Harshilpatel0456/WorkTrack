@@ -45,14 +45,16 @@ export const EmployeeOverview = () => {
   const [reports, setReports] = useState([]);
   const [reportError, setReportError] = useState('');
 
-  const activeEmp = employees.find((e) => e.id === selectedEmployeeId) || employees[0];
+  const activeEmp = (employees && employees.length > 0)
+    ? (employees.find((e) => e.id === selectedEmployeeId) || employees[0])
+    : null;
 
   // Active Approved assignments for this employee
-  const empAssignments = assignments.filter(
-    (a) => a.employeeId === activeEmp.id && a.status === 'Approved'
-  );
+  const empAssignments = activeEmp
+    ? assignments.filter((a) => (a.employeeId === activeEmp.id || a.employee === activeEmp.id) && (a.status === 'Approved' || a.status === 'APPROVED' || a.status === 'ACTIVE'))
+    : [];
   const primaryAssignment = empAssignments[0];
-  const primaryShift = shifts.find((s) => s.id === (primaryAssignment ? primaryAssignment.shiftId : activeEmp.currentShiftId)) || shifts[0];
+  const primaryShift = shifts.find((s) => s.id === (primaryAssignment ? (primaryAssignment.shiftId || primaryAssignment.shift) : activeEmp?.currentShiftId)) || shifts[0];
 
   // Today's attendance record
   const todayDateStr = localDate();
@@ -86,7 +88,7 @@ export const EmployeeOverview = () => {
 
   // Today's daily report
   const todayReport = reports.find(
-    (r) => r.reportingDate === todayDateStr
+    (r) => r.reportingDate === todayDateStr || r.shift_date === todayDateStr
   );
 
   // My past reports
@@ -287,8 +289,8 @@ export const EmployeeOverview = () => {
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-900">{rep.customerName}</span>
-                      <span className="text-[10px] text-slate-400 font-medium">({rep.reportingDate})</span>
+                      <span className="text-xs font-bold text-slate-900">{rep.customerName || rep.customer_name}</span>
+                      <span className="text-[10px] text-slate-400 font-medium">({rep.reportingDate || rep.shift_date})</span>
                       {rep.version > 1 && (
                         <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-100 text-[#245CE2]">
                           v{rep.version}
@@ -296,7 +298,7 @@ export const EmployeeOverview = () => {
                       )}
                     </div>
                     <p className="text-xs text-slate-600 mt-1 line-clamp-2">
-                      {rep.workCompleted}
+                      {rep.workCompleted || rep.work_summary}
                     </p>
                   </div>
                   <Badge status={rep.status} />

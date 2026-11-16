@@ -30,10 +30,10 @@ export const FeedbackMonitoring = () => {
           return report ? [{
             ...comment,
             reportId: report.id,
-            reportShift: report.shiftName,
-            customerName: report.customerName,
-            employeeName: report.employeeName,
-            reportingDate: report.reportingDate,
+            reportShift: report.shiftName || report.shift_name,
+            customerName: report.customerName || report.customer_name,
+            employeeName: report.employeeName || report.employee_name,
+            reportingDate: report.reportingDate || report.shift_date,
             fullReport: report,
           }] : [];
         });
@@ -49,12 +49,11 @@ export const FeedbackMonitoring = () => {
 
   const filteredItems = feedbackItems.filter((item) => {
     const q = (searchQuery || '').toLowerCase();
-    return (
-      (item.authorName || '').toLowerCase().includes(q) ||
-      (item.customerName || '').toLowerCase().includes(q) ||
-      (item.employeeName || '').toLowerCase().includes(q) ||
-      (item.message || '').toLowerCase().includes(q)
-    );
+    const author = (item.authorName || item.author_name || '').toLowerCase();
+    const customer = (item.customerName || item.customer_name || '').toLowerCase();
+    const employee = (item.employeeName || item.employee_name || '').toLowerCase();
+    const msg = (item.message || item.content || '').toLowerCase();
+    return author.includes(q) || customer.includes(q) || employee.includes(q) || msg.includes(q);
   });
 
   return (
@@ -132,20 +131,20 @@ export const FeedbackMonitoring = () => {
               {/* Main Comment */}
               <div className="flex items-start gap-3">
                 <div className="w-9 h-9 rounded-xl bg-blue-100 text-[#245CE2] flex items-center justify-center font-bold text-xs flex-shrink-0">
-                  {item.authorName.charAt(0)}
+                  {(item.authorName || item.author_name || 'U').charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="font-bold text-slate-900 text-xs">{item.authorName}</span>
-                      <span className="text-[11px] text-slate-400 font-medium ml-2">({item.authorRole})</span>
+                      <span className="font-bold text-slate-900 text-xs">{item.authorName || item.author_name || 'User'}</span>
+                      <span className="text-[11px] text-slate-400 font-medium ml-2">({item.authorRole || item.author_role || ''})</span>
                     </div>
                     <span className="text-[10px] text-slate-400">
-                      {new Date(item.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                      {(item.timestamp || item.created_at) ? new Date(item.timestamp || item.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : ''}
                     </span>
                   </div>
                   <p className="text-xs text-slate-700 mt-1 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100 font-sans">
-                    {item.message}
+                    {item.message || item.content}
                   </p>
                 </div>
               </div>
@@ -159,12 +158,12 @@ export const FeedbackMonitoring = () => {
                   {item.replies.map((reply) => (
                     <div key={reply.id} className="bg-blue-50/50 p-3 rounded-xl border border-blue-100 text-xs">
                       <div className="flex items-center justify-between text-[11px] mb-1">
-                        <span className="font-bold text-[#245CE2]">{reply.authorName}</span>
+                        <span className="font-bold text-[#245CE2]">{reply.authorName || reply.author_name || 'Staff'}</span>
                         <span className="text-[10px] text-slate-400">
-                          {new Date(reply.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {(reply.timestamp || reply.created_at) ? new Date(reply.timestamp || reply.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                         </span>
                       </div>
-                      <p className="text-slate-700 leading-relaxed">{reply.message}</p>
+                      <p className="text-slate-700 leading-relaxed">{reply.message || reply.content}</p>
                     </div>
                   ))}
                 </div>

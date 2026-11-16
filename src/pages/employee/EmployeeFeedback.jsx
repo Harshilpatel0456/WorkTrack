@@ -27,9 +27,9 @@ export const EmployeeFeedback = () => {
       return report ? [{
         ...comment,
         reportId: report.id,
-        reportCustomer: report.customerName,
-        reportShift: report.shiftName,
-        reportDate: report.reportingDate,
+        reportCustomer: report.customerName || report.customer_name,
+        reportShift: report.shiftName || report.shift_name,
+        reportDate: report.reportingDate || report.shift_date,
         fullReport: report,
       }] : [];
     }));
@@ -111,20 +111,20 @@ export const EmployeeFeedback = () => {
               {/* Customer Comment Bubble */}
               <div className="flex items-start gap-3.5">
                 <div className="w-10 h-10 rounded-xl bg-blue-100 text-[#245CE2] flex items-center justify-center font-bold text-sm flex-shrink-0">
-                  {item.authorName.charAt(0)}
+                  {(item.authorName || item.author_name || 'C').charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="font-bold text-slate-900 text-xs">{item.authorName}</span>
-                      <span className="text-[11px] text-slate-400 ml-2">({item.authorRole})</span>
+                      <span className="font-bold text-slate-900 text-xs">{item.authorName || item.author_name || 'Customer'}</span>
+                      <span className="text-[11px] text-slate-400 ml-2">({item.authorRole || item.author_role || 'Customer'})</span>
                     </div>
                     <span className="text-[10px] text-slate-400">
-                      {new Date(item.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                      {(item.timestamp || item.created_at) ? new Date(item.timestamp || item.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : ''}
                     </span>
                   </div>
                   <div className="mt-1.5 p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 text-xs text-slate-800 leading-relaxed font-sans">
-                    {item.message}
+                    {item.message || item.content}
                   </div>
                 </div>
               </div>
@@ -141,12 +141,12 @@ export const EmployeeFeedback = () => {
                       className="bg-blue-50/60 p-3 rounded-xl border border-blue-100 text-xs"
                     >
                       <div className="flex items-center justify-between text-[11px] mb-1">
-                        <span className="font-bold text-[#245CE2]">{reply.authorName} (You)</span>
+                        <span className="font-bold text-[#245CE2]">{reply.authorName || reply.author_name || 'You'} (You)</span>
                         <span className="text-[10px] text-slate-400">
-                          {new Date(reply.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {(reply.timestamp || reply.created_at) ? new Date(reply.timestamp || reply.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                         </span>
                       </div>
-                      <p className="text-slate-700 leading-relaxed">{reply.message}</p>
+                      <p className="text-slate-700 leading-relaxed">{reply.message || reply.content}</p>
                     </div>
                   ))}
                 </div>

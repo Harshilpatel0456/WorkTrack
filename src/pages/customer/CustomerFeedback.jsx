@@ -17,7 +17,7 @@ export const CustomerFeedback = () => {
   const { selectedCustomerId } = useAuth();
   const { customers, showToast } = useApp();
 
-  const currentCust = customers.find((c) => c.id === selectedCustomerId) || customers[0];
+  const currentCust = (customers && customers.length > 0) ? (customers.find((c) => c.id === selectedCustomerId) || customers[0]) : null;
   const [customerReports, setCustomerReports] = useState([]);
   const [feedbackList, setFeedbackList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,9 +36,9 @@ export const CustomerFeedback = () => {
       return report ? [{
         ...comment,
         reportId: report.id,
-        reportShift: report.shiftName,
-        reportDate: report.reportingDate,
-        employeeName: report.employeeName,
+        reportShift: report.shiftName || report.shift_name,
+        reportDate: report.reportingDate || report.shift_date,
+        employeeName: report.employeeName || report.employee_name,
         fullReport: report,
       }] : [];
     }));
@@ -106,11 +106,16 @@ export const CustomerFeedback = () => {
               className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#245CE2]"
             >
               <option value="">-- Choose from available reports --</option>
-              {customerReports.map((rep) => (
-                <option key={rep.id} value={rep.id}>
-                  {rep.reportingDate} • {rep.shiftName.split('(')[0]} (Staff: {rep.employeeName})
-                </option>
-              ))}
+              {customerReports.map((rep) => {
+                const shiftTitle = (rep.shiftName || rep.shift_name || 'Shift').split('(')[0].trim();
+                const repDate = rep.reportingDate || rep.shift_date || '';
+                const staffName = rep.employeeName || rep.employee_name || 'Staff';
+                return (
+                  <option key={rep.id} value={rep.id}>
+                    {repDate} • {shiftTitle} (Staff: {staffName})
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -177,20 +182,20 @@ export const CustomerFeedback = () => {
               {/* Customer Comment Bubble */}
               <div className="flex items-start gap-3.5">
                 <div className="w-9 h-9 rounded-xl bg-blue-100 text-[#245CE2] flex items-center justify-center font-bold text-xs flex-shrink-0">
-                  {item.authorName.charAt(0)}
+                  {(item.authorName || item.author_name || 'C').charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="font-bold text-slate-900 text-xs">{item.authorName}</span>
-                      <span className="text-[11px] text-slate-400 ml-2">({item.authorRole})</span>
+                      <span className="font-bold text-slate-900 text-xs">{item.authorName || item.author_name || 'Customer'}</span>
+                      <span className="text-[11px] text-slate-400 ml-2">({item.authorRole || item.author_role || 'Customer'})</span>
                     </div>
                     <span className="text-[10px] text-slate-400">
-                      {new Date(item.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                      {(item.timestamp || item.created_at) ? new Date(item.timestamp || item.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : ''}
                     </span>
                   </div>
                   <div className="mt-1.5 p-3.5 bg-blue-50/40 rounded-xl border border-blue-100 text-xs text-slate-800 leading-relaxed font-sans">
-                    {item.message}
+                    {item.message || item.content}
                   </div>
                 </div>
               </div>
@@ -207,12 +212,12 @@ export const CustomerFeedback = () => {
                       className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-100 text-xs"
                     >
                       <div className="flex items-center justify-between text-[11px] mb-1">
-                        <span className="font-bold text-emerald-800">{reply.authorName}</span>
+                        <span className="font-bold text-emerald-800">{reply.authorName || reply.author_name || 'Staff'}</span>
                         <span className="text-[10px] text-slate-400">
-                          {new Date(reply.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {(reply.timestamp || reply.created_at) ? new Date(reply.timestamp || reply.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                         </span>
                       </div>
-                      <p className="text-slate-700 leading-relaxed">{reply.message}</p>
+                      <p className="text-slate-700 leading-relaxed">{reply.message || reply.content}</p>
                     </div>
                   ))}
                 </div>

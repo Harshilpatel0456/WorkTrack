@@ -47,7 +47,7 @@ class ReportCommentViewSet(viewsets.ModelViewSet):
         # Check authorization
         if user.role == 'EMPLOYEE' and hasattr(user, 'employee_profile'):
             if report.shift_assignment.employee_customer_assignment.employee != user.employee_profile:
-                raise permissions.exceptions.PermissionDenied("You are not assigned to this report.")
+                raise PermissionDenied("You are not assigned to this report.")
         elif user.role == 'CUSTOMER' and hasattr(user, 'customer_profile'):
             if report.shift_assignment.employee_customer_assignment.customer != user.customer_profile:
                 raise PermissionDenied("You cannot comment on reports outside your account.")

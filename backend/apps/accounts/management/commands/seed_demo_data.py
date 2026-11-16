@@ -82,13 +82,12 @@ class Command(BaseCommand):
         )
 
         NotificationPreference.objects.get_or_create(
-            customer=cust_profile,
+            user=cust_user,
             defaults={
                 'frequency': NotificationPreference.Frequency.HOURLY,
-                'immediate_alert_on_suspicious': True,
                 'in_app_enabled': True,
                 'email_enabled': True,
-                'push_enabled': True,
+                'timezone': 'America/Chicago',
             }
         )
 
