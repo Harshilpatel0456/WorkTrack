@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
+import { useAttendance } from '../../context/AttendanceContext';
 import { StatCard } from '../../components/common/StatCard';
 import { Badge } from '../../components/common/Badge';
 import { ReportDetailModal } from '../../components/modals/ReportDetailModal';
@@ -20,6 +21,9 @@ import {
   TrendingUp,
   History,
   FileCheck,
+  Timer,
+  PlayCircle,
+  StopCircle,
 } from 'lucide-react';
 
 const localDate = () => {
@@ -31,6 +35,15 @@ const formatTime = (value) => value
   ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   : '--';
 
+const formatStopwatch = (ms) => {
+  if (ms == null || isNaN(ms) || ms < 0) return '00:00:00';
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+};
+
 export const EmployeeOverview = () => {
   const { user, selectedEmployeeId } = useAuth();
   const { employees, assignments, shifts, showToast } = useApp();
@@ -38,12 +51,27 @@ export const EmployeeOverview = () => {
 
   const [selectedReport, setSelectedReport] = useState(null);
   const [historyReport, setHistoryReport] = useState(null);
-  const [myShiftRows, setMyShiftRows] = useState([]);
   const [myAttendance, setMyAttendance] = useState([]);
-  const [attendanceError, setAttendanceError] = useState('');
-  const [punching, setPunching] = useState(false);
   const [reports, setReports] = useState([]);
   const [reportError, setReportError] = useState('');
+
+  const {
+    todayShift,
+    myShiftRows,
+    todaySessions,
+    completedSessions,
+    totalCompletedHours,
+    currentSessionNumber,
+    activeAttendance: todayAttendance,
+    isCheckedIn,
+    isCheckedOut,
+    stopwatchTime,
+    punching,
+    attendanceError,
+    checkIn,
+    checkOut,
+    refreshAttendance,
+  } = useAttendance();
 
   const activeEmp = (employees && employees.length > 0)
     ? (employees.find((e) => e.id === selectedEmployeeId) || employees[0])
@@ -58,25 +86,20 @@ export const EmployeeOverview = () => {
 
   // Today's attendance record
   const todayDateStr = localDate();
-  const todayShift = myShiftRows.find((row) => row.shift_date === todayDateStr) || myShiftRows[0];
-  const todayAttendance = todayShift?.attendance;
-  const todayAttendanceStatus = todayShift?.attendance_status || 'SCHEDULED';
+  const todayAttendanceStatus = isCheckedOut
+    ? 'COMPLETED'
+    : isCheckedIn
+    ? (todayAttendance?.attendance_status || 'PRESENT')
+    : (todayShift?.attendance_status || 'SCHEDULED');
 
-  const loadAttendance = useCallback(async () => {
+  const loadAttendanceHistory = useCallback(async () => {
     try {
-      const [shiftRows, records] = await Promise.all([
-        adminApi.attendance.myShifts(todayDateStr),
-        adminApi.attendance.myAttendance(),
-      ]);
-      setMyShiftRows(shiftRows);
-      setMyAttendance(records);
-      setAttendanceError('');
-    } catch (error) {
-      setAttendanceError(error.message);
-    }
+      const records = await adminApi.attendance.myAttendance();
+      setMyAttendance(records || []);
+    } catch {}
   }, []);
 
-  useEffect(() => { loadAttendance(); }, [loadAttendance]);
+  useEffect(() => { loadAttendanceHistory(); }, [loadAttendanceHistory, isCheckedIn, isCheckedOut]);
 
   useEffect(() => {
     let active = true;
@@ -95,21 +118,14 @@ export const EmployeeOverview = () => {
   const myReports = reports;
 
   const handlePunch = async (action) => {
-    if (!todayShift) {
-      showToast('No assigned shift is available for attendance.', 'error');
-      return;
-    }
-    setPunching(true);
     try {
-      if (action === 'in') await adminApi.attendance.checkIn(todayShift.shift_assignment_id);
-      else await adminApi.attendance.checkOut(todayShift.shift_assignment_id);
-      showToast(`Shift ${action === 'in' ? 'check-in' : 'check-out'} recorded`);
-      await loadAttendance();
-    } catch (error) {
-      showToast(error.message, 'error');
-    } finally {
-      setPunching(false);
-    }
+      if (action === 'in') {
+        await checkIn();
+      } else {
+        await checkOut();
+      }
+      loadAttendanceHistory();
+    } catch {}
   };
 
   return (
@@ -142,52 +158,142 @@ export const EmployeeOverview = () => {
               <div className="h-8 w-[1px] bg-white/20 hidden sm:block"></div>
               <div>
                 <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">
-                  Active Shift Window
+                  Shift Working Mode
                 </span>
                 <span className="font-bold text-white flex items-center gap-1.5 mt-0.5">
                   <Clock className="w-3.5 h-3.5 text-amber-400" />
-                  {primaryShift.name} ({primaryShift.startTime} – {primaryShift.endTime})
+                  Work-Based Punch &amp; Stopwatch
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Quick Check-In / Check-Out Widget */}
-          <div className="bg-white/10 p-5 rounded-2xl backdrop-blur-md border border-white/15 flex flex-col justify-between gap-4 min-w-[280px]">
+          {/* Shift Attendance & Live Stopwatch Working Time Widget */}
+          <div className="bg-white/10 p-5 rounded-2xl backdrop-blur-md border border-white/15 flex flex-col justify-between gap-4 min-w-[320px] shadow-lg">
             <div>
               <div className="flex items-center justify-between text-xs mb-2">
-                <span className="text-slate-300 font-semibold">Today's Attendance</span>
-                <Badge status={todayAttendanceStatus} />
+                <span className="text-slate-200 font-bold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                  <Timer className={`w-3.5 h-3.5 ${isCheckedIn ? 'text-emerald-400 animate-pulse' : 'text-slate-400'}`} />
+                  Shift Working Time
+                </span>
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border ${
+                  isCheckedIn
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40 animate-pulse'
+                    : completedSessions && completedSessions.length > 0
+                    ? 'bg-blue-500/20 text-blue-200 border-blue-400/40'
+                    : 'bg-slate-500/20 text-slate-300 border-slate-400/30'
+                }`}>
+                  {isCheckedIn
+                    ? `● On Duty (S${currentSessionNumber})`
+                    : completedSessions && completedSessions.length > 0
+                    ? `✓ ${completedSessions.length} Session${completedSessions.length === 1 ? '' : 's'} Done`
+                    : 'Ready'}
+                </span>
               </div>
-              <p className="text-[11px] text-slate-300">
-                {todayAttendance?.check_in
-                  ? `Checked in: ${formatTime(todayAttendance.check_in)}${todayAttendance.check_out ? ` • Out: ${formatTime(todayAttendance.check_out)}` : ''}`
-                  : todayShift ? `${todayShift.shift_details.customerName} · ${todayShift.shift_details.shiftName}` : 'No shift assigned today.'}
-              </p>
-              {attendanceError && <p role="alert" className="mt-2 text-[11px] text-rose-200">{attendanceError}</p>}
+
+              {/* Running Stopwatch in HH:MM:SS */}
+              <div className="bg-slate-950/70 border border-white/10 rounded-xl p-3 my-2 text-center relative overflow-hidden">
+                <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 mb-0.5">
+                  {isCheckedIn
+                    ? `Session ${currentSessionNumber} Stopwatch`
+                    : completedSessions && completedSessions.length > 0
+                    ? `Session ${completedSessions.length} Finished Duration`
+                    : 'Shift Stopwatch'}
+                </div>
+                <div className="font-mono text-3xl sm:text-4xl font-black text-white tracking-widest drop-shadow-md">
+                  {stopwatchTime}
+                </div>
+                <p className="text-[11px] text-slate-300 mt-1">
+                  {isCheckedIn
+                    ? `Session ${currentSessionNumber} In: ${formatTime(todayAttendance?.check_in)} (Live)`
+                    : completedSessions && completedSessions.length > 0
+                    ? `Last shift ended at ${formatTime(todayAttendance?.check_out)} • Ready for Session ${currentSessionNumber}`
+                    : todayShift ? `${todayShift.shift_details?.customerName || primaryAssignment?.customerName || 'Assigned Site'} · Ready to begin` : 'Ready to start shift'}
+                </p>
+                {completedSessions && completedSessions.length > 0 && (
+                  <div className="mt-1.5 pt-1.5 border-t border-white/10 text-[10px] text-blue-200 font-medium">
+                    Total today: <strong className="font-mono text-white">{totalCompletedHours.toFixed(2)}h</strong> across {completedSessions.length} shift session{completedSessions.length === 1 ? '' : 's'}
+                  </div>
+                )}
+              </div>
+
+              {attendanceError && <p role="alert" className="mt-1 text-[11px] text-rose-200">{attendanceError}</p>}
             </div>
 
+            {/* Check In / Check Out Action Buttons */}
             <div className="flex gap-2">
               <button
                 onClick={() => handlePunch('in')}
-                disabled={!todayShift || Boolean(todayAttendance?.check_in) || todayAttendanceStatus === 'ABSENT' || punching}
-                className="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5"
+                disabled={isCheckedIn || punching}
+                className="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
               >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                Check In
+                <PlayCircle className="w-4 h-4" />
+                {punching && !isCheckedIn
+                  ? 'Starting…'
+                  : completedSessions && completedSessions.length > 0
+                  ? `Start Shift (S${currentSessionNumber})`
+                  : 'Check In'}
               </button>
               <button
                 onClick={() => handlePunch('out')}
-                disabled={!todayAttendance?.check_in || Boolean(todayAttendance?.check_out) || punching}
-                className="flex-1 py-2.5 px-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:hover:bg-rose-600 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5"
+                disabled={!isCheckedIn || punching}
+                className="flex-1 py-2.5 px-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:hover:bg-rose-600 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
               >
-                <Clock className="w-3.5 h-3.5" />
-                Check Out
+                <StopCircle className="w-4 h-4" />
+                {punching && isCheckedIn ? 'Finishing…' : `Check Out (End S${currentSessionNumber})`}
               </button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Today's Shift Sessions Multi-Session Summary Strip */}
+      {todaySessions && todaySessions.length > 0 && (
+        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-subtle flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-blue-50 text-[#245CE2]">
+              <Timer className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-bold text-slate-900">Today's Shift Sessions ({todaySessions.length})</h4>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-100 text-[#245CE2] font-bold">
+                  Total Logged: {totalCompletedHours.toFixed(2)} hrs
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Flexible shift tracking: start and end sessions anytime during your workday.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {todaySessions.map((session, idx) => {
+              const active = session.check_in && !session.check_out;
+              return (
+                <div
+                  key={session.shift_assignment_id || idx}
+                  className={`px-3 py-1.5 rounded-xl border text-xs flex items-center gap-2 ${
+                    active
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold'
+                      : 'bg-slate-50 border-slate-200 text-slate-700 font-medium'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${active ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></span>
+                  <span className="font-bold text-[10px] uppercase">Session {idx + 1}:</span>
+                  <span className="font-mono text-[11px]">
+                    {formatTime(session.check_in)} – {session.check_out ? formatTime(session.check_out) : 'In Progress'}
+                  </span>
+                  {session.duration_hours != null && session.check_out && (
+                    <span className="text-[10px] font-bold text-slate-500">
+                      ({Number(session.duration_hours).toFixed(2)}h)
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* KPI Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -199,11 +305,17 @@ export const EmployeeOverview = () => {
           color="blue"
         />
         <StatCard
-          title="Attendance Punch"
-          value={todayAttendanceStatus}
-          subtitle={todayAttendance?.check_in ? `At ${formatTime(todayAttendance.check_in)}` : 'Not checked in'}
-          icon={UserCheck}
-          color={todayAttendanceStatus === 'PRESENT' || todayAttendanceStatus === 'LATE' ? 'emerald' : 'blue'}
+          title="Shift Working Time"
+          value={stopwatchTime}
+          subtitle={
+            isCheckedIn
+              ? `Session ${currentSessionNumber} running (Live)`
+              : completedSessions && completedSessions.length > 0
+              ? `Total today: ${totalCompletedHours.toFixed(2)}h (${completedSessions.length} shifts)`
+              : 'Not checked in'
+          }
+          icon={Timer}
+          color={isCheckedIn ? 'emerald' : (completedSessions && completedSessions.length > 0 ? 'blue' : 'slate')}
         />
         <StatCard
           title="Daily Report Status"

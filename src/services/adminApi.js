@@ -151,13 +151,21 @@ export const adminApi = {
       ).toString();
       return apiClient(`/attendance/summary/${query ? `?${query}` : ''}`);
     },
-    checkIn: (shiftAssignmentId) => apiClient('/attendance/check_in/', {
+    checkIn: (shiftAssignmentId, extra = {}) => apiClient('/attendance/check_in/', {
       method: 'POST',
-      body: JSON.stringify({ shift_assignment_id: shiftAssignmentId }),
+      body: JSON.stringify({
+        ...(shiftAssignmentId ? { shift_assignment_id: shiftAssignmentId } : {}),
+        flexible: true,
+        ...extra,
+      }),
     }),
-    checkOut: (shiftAssignmentId) => apiClient('/attendance/check_out/', {
+    checkOut: (shiftAssignmentId, extra = {}) => apiClient('/attendance/check_out/', {
       method: 'POST',
-      body: JSON.stringify({ shift_assignment_id: shiftAssignmentId }),
+      body: JSON.stringify({
+        ...(shiftAssignmentId ? { shift_assignment_id: shiftAssignmentId } : {}),
+        flexible: true,
+        ...extra,
+      }),
     }),
     correct: (id, data) => apiClient(`/attendance/${id}/correct/`, {
       method: 'PATCH',

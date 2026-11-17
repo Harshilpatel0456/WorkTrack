@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
 import { NotificationProvider } from './context/NotificationContext';
+import { AttendanceProvider } from './context/AttendanceContext';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
 
@@ -67,7 +68,8 @@ function App() {
     <AuthProvider>
       <AppProvider>
         <NotificationProvider>
-          <BrowserRouter>
+          <AttendanceProvider>
+            <BrowserRouter>
             <ErrorBoundary>
             <Routes>
               {/* Index & Auth Pages */}
@@ -130,6 +132,7 @@ function App() {
             </Routes>
             </ErrorBoundary>
           </BrowserRouter>
+          </AttendanceProvider>
         </NotificationProvider>
       </AppProvider>
     </AuthProvider>
