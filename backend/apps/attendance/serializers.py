@@ -64,14 +64,16 @@ class AttendanceSerializer(serializers.ModelSerializer):
 
 
 class CheckInSerializer(serializers.Serializer):
-    shift_assignment_id = serializers.UUIDField(required=True)
+    shift_assignment_id = serializers.UUIDField(required=False, allow_null=True)
     notes = serializers.CharField(required=False, allow_blank=True, default='')
     location_verified = serializers.BooleanField(required=False, default=True)
+    flexible = serializers.BooleanField(required=False, default=False)
 
 
 class CheckOutSerializer(serializers.Serializer):
-    shift_assignment_id = serializers.UUIDField(required=True)
+    shift_assignment_id = serializers.UUIDField(required=False, allow_null=True)
     notes = serializers.CharField(required=False, allow_blank=True, default='')
+    flexible = serializers.BooleanField(required=False, default=False)
 
 
 class AttendanceCorrectionSerializer(serializers.ModelSerializer):

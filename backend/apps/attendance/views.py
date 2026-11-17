@@ -24,7 +24,7 @@ from apps.attendance.serializers import (
 from apps.audit.models import ActivityLog
 from apps.notifications.models import Notification
 from apps.notifications.services import notify_assignment_recipients
-from apps.shifts.models import ShiftAssignment
+from apps.shifts.models import Shift, ShiftAssignment
 from apps.shifts.serializers import ShiftAssignmentSerializer
 
 
@@ -45,17 +45,24 @@ def _shift_bounds(assignment):
 
 def _refresh_completed_attendance(assignments):
     now = timezone.now()
+    today = timezone.localdate()
     for assignment in assignments:
         if assignment.status == ShiftAssignment.Status.CANCELLED:
+            continue
+        attendance = Attendance.objects.filter(shift_assignment=assignment).first()
+        if assignment.shift_date == today and attendance and attendance.check_in and not attendance.check_out:
             continue
         _, end = _shift_bounds(assignment)
         if end > now:
             continue
 
-        attendance, created = Attendance.objects.get_or_create(
-            shift_assignment=assignment,
-            defaults={'attendance_status': Attendance.Status.ABSENT},
-        )
+        if not attendance:
+            attendance, created = Attendance.objects.get_or_create(
+                shift_assignment=assignment,
+                defaults={'attendance_status': Attendance.Status.ABSENT},
+            )
+        else:
+            created = False
         was_absent = attendance.attendance_status == Attendance.Status.ABSENT
         if not attendance.check_in and attendance.attendance_status != Attendance.Status.ABSENT:
             attendance.attendance_status = Attendance.Status.ABSENT
@@ -223,14 +230,57 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     def check_in(self, request):
         serializer = CheckInSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        try:
+        assignment_id = serializer.validated_data.get('shift_assignment_id')
+        assignment = None
+        if assignment_id:
+            try:
+                assignment = ShiftAssignment.objects.select_for_update().select_related(
+                    'shift',
+                    'employee_customer_assignment__employee__user',
+                    'employee_customer_assignment__customer',
+                ).get(id=assignment_id)
+            except ShiftAssignment.DoesNotExist:
+                return Response({'detail': 'Shift assignment not found.'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            profile = getattr(request.user, 'employee_profile', None)
+            if not profile:
+                return Response({'detail': 'Employee profile not found.'}, status=status.HTTP_403_FORBIDDEN)
+            today = timezone.localdate()
             assignment = ShiftAssignment.objects.select_for_update().select_related(
                 'shift',
                 'employee_customer_assignment__employee__user',
                 'employee_customer_assignment__customer',
-            ).get(id=serializer.validated_data['shift_assignment_id'])
-        except ShiftAssignment.DoesNotExist:
-            return Response({'detail': 'Shift assignment not found.'}, status=status.HTTP_404_NOT_FOUND)
+            ).filter(
+                employee_customer_assignment__employee=profile,
+                shift_date=today,
+                status__in=[ShiftAssignment.Status.SCHEDULED, ShiftAssignment.Status.IN_PROGRESS],
+            ).first()
+            if not assignment:
+                active_contract = profile.customer_assignments.filter(status='ACTIVE').first()
+                if not active_contract:
+                    return Response({'detail': 'No active customer assignment found.'}, status=status.HTTP_400_BAD_REQUEST)
+                default_shift = Shift.objects.filter(is_active=True).first()
+                if not default_shift:
+                    return Response({'detail': 'No active shift template found.'}, status=status.HTTP_400_BAD_REQUEST)
+                assignment = ShiftAssignment.objects.create(
+                    employee_customer_assignment=active_contract,
+                    shift=default_shift,
+                    shift_date=today,
+                    assigned_by=active_contract.assigned_by,
+                    status=ShiftAssignment.Status.SCHEDULED,
+                )
+
+        # If this shift assignment was already completed (or checked out), start a new shift session
+        existing_att = Attendance.objects.filter(shift_assignment=assignment).first()
+        if assignment.status == ShiftAssignment.Status.COMPLETED or (existing_att and existing_att.check_out is not None):
+            contract = assignment.employee_customer_assignment
+            assignment = ShiftAssignment.objects.create(
+                employee_customer_assignment=contract,
+                shift=assignment.shift,
+                shift_date=timezone.localdate(),
+                assigned_by=assignment.assigned_by,
+                status=ShiftAssignment.Status.SCHEDULED,
+            )
 
         contract = assignment.employee_customer_assignment
         if contract.employee.user_id != request.user.id:
@@ -240,15 +290,17 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         if assignment.status not in (ShiftAssignment.Status.SCHEDULED, ShiftAssignment.Status.IN_PROGRESS):
             return Response({'detail': 'This shift is not available for check-in.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        flexible = serializer.validated_data.get('flexible', False)
         start, end = _shift_bounds(assignment)
         now = timezone.now()
-        if now < start:
-            return Response({'detail': 'Check-in is available when the assigned shift begins.'}, status=status.HTTP_400_BAD_REQUEST)
-        if now >= end:
-            return Response({'detail': 'Check-in is not available after the assigned shift ends.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not flexible:
+            if now < start:
+                return Response({'detail': 'Check-in is available when the assigned shift begins.'}, status=status.HTTP_400_BAD_REQUEST)
+            if now >= end:
+                return Response({'detail': 'Check-in is not available after the assigned shift ends.'}, status=status.HTTP_400_BAD_REQUEST)
 
         attendance = Attendance.objects.select_for_update().filter(shift_assignment=assignment).first()
-        if attendance and attendance.check_in:
+        if attendance and attendance.check_in and attendance.check_out is None:
             return Response({'detail': 'Duplicate check-in is not allowed. You have already checked in.'}, status=status.HTTP_400_BAD_REQUEST)
 
         if attendance is None:
@@ -258,8 +310,11 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         attendance.duration_hours = Decimal('0.00')
         attendance.notes = serializer.validated_data.get('notes', '')
         attendance.location_verified = serializer.validated_data.get('location_verified', True)
-        grace_end = start + timedelta(minutes=assignment.shift.grace_period_minutes)
-        attendance.attendance_status = Attendance.Status.LATE if now > grace_end else Attendance.Status.PRESENT
+        if not flexible:
+            grace_end = start + timedelta(minutes=assignment.shift.grace_period_minutes)
+            attendance.attendance_status = Attendance.Status.LATE if now > grace_end else Attendance.Status.PRESENT
+        else:
+            attendance.attendance_status = Attendance.Status.PRESENT
         attendance.save()
 
         assignment.status = ShiftAssignment.Status.IN_PROGRESS
@@ -295,14 +350,30 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     def check_out(self, request):
         serializer = CheckOutSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        try:
-            assignment = ShiftAssignment.objects.select_for_update().select_related(
-                'shift',
-                'employee_customer_assignment__employee__user',
-                'employee_customer_assignment__customer',
-            ).get(id=serializer.validated_data['shift_assignment_id'])
-        except ShiftAssignment.DoesNotExist:
-            return Response({'detail': 'Shift assignment not found.'}, status=status.HTTP_404_NOT_FOUND)
+        assignment_id = serializer.validated_data.get('shift_assignment_id')
+        assignment = None
+        if assignment_id:
+            try:
+                assignment = ShiftAssignment.objects.select_for_update().select_related(
+                    'shift',
+                    'employee_customer_assignment__employee__user',
+                    'employee_customer_assignment__customer',
+                ).get(id=assignment_id)
+            except ShiftAssignment.DoesNotExist:
+                return Response({'detail': 'Shift assignment not found.'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            profile = getattr(request.user, 'employee_profile', None)
+            if not profile:
+                return Response({'detail': 'Employee profile not found.'}, status=status.HTTP_403_FORBIDDEN)
+            open_attendance = Attendance.objects.select_for_update().filter(
+                shift_assignment__employee_customer_assignment__employee=profile,
+                check_in__isnull=False,
+                check_out__isnull=True,
+            ).first()
+            if open_attendance:
+                assignment = open_attendance.shift_assignment
+            else:
+                return Response({'detail': 'No active check-in found to check out from.'}, status=status.HTTP_400_BAD_REQUEST)
 
         if assignment.employee_customer_assignment.employee.user_id != request.user.id:
             return Response({'detail': 'You can only check out of your own assigned shift.'}, status=status.HTTP_403_FORBIDDEN)
@@ -312,10 +383,12 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         if attendance.check_out:
             return Response({'detail': 'You have already checked out for this shift.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        _, end = _shift_bounds(assignment)
+        flexible = serializer.validated_data.get('flexible', False)
         now = timezone.now()
-        if now < end:
-            return Response({'detail': 'Check-out is available when the assigned shift ends.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not flexible:
+            _, end = _shift_bounds(assignment)
+            if now < end:
+                return Response({'detail': 'Check-out is available when the assigned shift ends.'}, status=status.HTTP_400_BAD_REQUEST)
         if now < attendance.check_in:
             return Response({'detail': 'Check-out cannot precede check-in.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -377,7 +450,28 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             'shift',
             'employee_customer_assignment__employee__user',
             'employee_customer_assignment__customer',
-        ).order_by('shift_date', 'shift__start_time')
+        ).order_by('shift_date', 'created_at')
+
+        if not schedules.exists():
+            active_contract = profile.customer_assignments.filter(status='ACTIVE').first()
+            if active_contract:
+                default_shift = Shift.objects.filter(is_active=True).first()
+                if default_shift:
+                    assignment, _ = ShiftAssignment.objects.get_or_create(
+                        employee_customer_assignment=active_contract,
+                        shift=default_shift,
+                        shift_date=today,
+                        defaults={
+                            'assigned_by': active_contract.assigned_by,
+                            'status': ShiftAssignment.Status.SCHEDULED,
+                        }
+                    )
+                    schedules = ShiftAssignment.objects.filter(id=assignment.id).select_related(
+                        'shift',
+                        'employee_customer_assignment__employee__user',
+                        'employee_customer_assignment__customer',
+                    )
+
         _refresh_completed_attendance(schedules)
         items = []
         for assignment in schedules:

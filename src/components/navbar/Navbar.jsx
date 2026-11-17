@@ -1,16 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationContext';
+import { useAttendance } from '../../context/AttendanceContext';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bell, Search, Menu, LogOut, CheckCheck, Clock, ArrowRight, UserCheck } from 'lucide-react';
+import { Bell, Search, Menu, LogOut, CheckCheck, Clock, ArrowRight, UserCheck, Timer, CheckCircle2 } from 'lucide-react';
 
 export const Navbar = ({ onToggleSidebar, onToggleCollapse, isCollapsed, title }) => {
   const { role, user, logout } = useAuth();
   const { notifications, unreadCount, loading, error, refresh, markRead, markAllRead } = useNotifications();
+  const { isCheckedIn, isCheckedOut, stopwatchTime, currentSessionNumber, completedSessions, totalCompletedHours } = useAttendance();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
+  const isEmployee = (role || '').toLowerCase() === 'employee';
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -68,8 +71,41 @@ export const Navbar = ({ onToggleSidebar, onToggleCollapse, isCollapsed, title }
           </div>
         </div>
 
-        {/* Right: Search + Notifications + Profile */}
-        <div className="flex items-center gap-3" ref={dropdownRef}>
+        {/* Right: Active Stopwatch Timer + Search + Notifications + Profile */}
+        <div className="flex items-center gap-2.5 sm:gap-3" ref={dropdownRef}>
+          {/* Active Shift Stopwatch in Header for Employees */}
+          {isEmployee && isCheckedIn && (
+            <Link
+              to="/employee"
+              className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-950 shadow-sm transition-all group"
+              title={`Shift Session ${currentSessionNumber} Active — Click to open Terminal`}
+            >
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-800 hidden md:inline">
+                Shift {currentSessionNumber > 1 ? `S${currentSessionNumber}` : 'Timer'}
+              </span>
+              <div className="flex items-center gap-1.5 font-mono text-xs sm:text-sm font-black text-emerald-950 bg-white/90 px-2 py-0.5 rounded-lg border border-emerald-200 shadow-inner">
+                <Timer className="w-3.5 h-3.5 text-emerald-600 animate-spin-slow" />
+                <span>{stopwatchTime}</span>
+              </div>
+            </Link>
+          )}
+
+          {isEmployee && !isCheckedIn && completedSessions && completedSessions.length > 0 && (
+            <Link
+              to="/employee"
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-900 text-xs font-semibold transition-all"
+              title={`${completedSessions.length} Shift session${completedSessions.length === 1 ? '' : 's'} logged today — Total: ${totalCompletedHours.toFixed(2)}h`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
+              <span className="text-[11px] text-blue-700 font-bold">Today:</span>
+              <span className="font-mono font-bold text-xs text-blue-950">{totalCompletedHours.toFixed(2)}h ({completedSessions.length} shift{completedSessions.length === 1 ? '' : 's'})</span>
+            </Link>
+          )}
+
           {/* Quick Search */}
           <div className="hidden md:flex items-center relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />

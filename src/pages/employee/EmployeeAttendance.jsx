@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useAttendance } from '../../context/AttendanceContext';
 import { Badge } from '../../components/common/Badge';
 import { adminApi } from '../../services/adminApi';
 import {
@@ -25,6 +26,7 @@ const formatDuration = (value) => value == null ? '--' : `${Number(value).toFixe
 
 export const EmployeeAttendance = () => {
   const { showToast } = useApp();
+  const { refreshAttendance } = useAttendance();
   const [shifts, setShifts] = useState([]);
   const [history, setHistory] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -61,6 +63,7 @@ export const EmployeeAttendance = () => {
       else await adminApi.attendance.checkOut(item.shift_assignment_id);
       showToast(`Shift ${action === 'in' ? 'check-in' : 'check-out'} recorded`);
       await loadAttendance();
+      refreshAttendance();
     } catch (requestError) {
       showToast(requestError.message, 'error');
     } finally {
