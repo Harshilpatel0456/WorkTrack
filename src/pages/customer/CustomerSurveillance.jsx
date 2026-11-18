@@ -200,6 +200,33 @@ export const CustomerSurveillance = () => {
                     </button>
                   </div>
 
+                  {/* Attached Evidence Images Gallery */}
+                  {Array.isArray(batch.evidenceImages) && batch.evidenceImages.length > 0 && (
+                    <div className="p-4 rounded-xl bg-white border border-slate-200/80 space-y-2">
+                      <span className="font-bold text-slate-700 uppercase tracking-wider text-[11px] block">
+                        Attached Audit Evidence & Incident Photos ({batch.evidenceImages.length}):
+                      </span>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                        {batch.evidenceImages.map((img, idx) => (
+                          <div
+                            key={img.id || idx}
+                            className="group relative rounded-lg overflow-hidden border border-slate-200 bg-slate-900 h-24 shadow-xs"
+                          >
+                            <img
+                              src={img.dataUrl || img}
+                              alt={img.name || `Evidence ${idx + 1}`}
+                              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent pointer-events-none" />
+                            <span className="absolute bottom-1 left-1.5 right-1.5 text-[9px] text-white truncate font-medium">
+                              {img.name || `Evidence #${idx + 1}`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {batch.snapshots.map((snap) => (
                       <CameraSnapshotCard

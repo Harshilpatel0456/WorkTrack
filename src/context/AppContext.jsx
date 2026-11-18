@@ -27,7 +27,7 @@ export const AppProvider = ({ children }) => {
       const next = !prev;
       try {
         localStorage.setItem('worktrack_sidebar_collapsed', String(next));
-      } catch {}
+      } catch { }
       return next;
     });
   };
@@ -48,7 +48,7 @@ export const AppProvider = ({ children }) => {
     }, 4000);
   };
 
-  const triggerNotification = () => {};
+  const triggerNotification = () => { };
 
   // ================= EMPLOYEES =================
   const addEmployee = (empData) => {
@@ -156,10 +156,10 @@ export const AppProvider = ({ children }) => {
   // ================= ASSIGNMENTS =================
   const createAssignment = ({ customerId, employeeId, shiftId, assignmentDate, notes }) => {
     // Duplicate check: Prevent assigning same employee to same customer on same shift
-    const existing = assignments.find(a => 
-      a.customerId === customerId && 
-      a.employeeId === employeeId && 
-      a.shiftId === shiftId && 
+    const existing = assignments.find(a =>
+      a.customerId === customerId &&
+      a.employeeId === employeeId &&
+      a.shiftId === shiftId &&
       a.status === 'Approved'
     );
 
@@ -236,11 +236,11 @@ export const AppProvider = ({ children }) => {
   // ================= DAILY REPORTS =================
   const submitDailyReport = (reportData) => {
     const today = reportData.reportingDate || new Date().toISOString().split('T')[0];
-    
+
     // Business rule: One report per employee per shift assignment
-    const existing = reports.find(r => 
-      r.employeeId === reportData.employeeId && 
-      r.shiftId === reportData.shiftId && 
+    const existing = reports.find(r =>
+      r.employeeId === reportData.employeeId &&
+      r.shiftId === reportData.shiftId &&
       r.customerId === reportData.customerId &&
       r.reportingDate === today
     );
@@ -480,7 +480,89 @@ export const AppProvider = ({ children }) => {
     showToast(`Camera verification marked as ${verifiedStatus}`);
   };
 
-  const submitHourlySurveillanceBatch = (batchId, overallAssessment, actionsTaken) => {
+  const uploadSnapshotImage = (batchId, snapshotId, imageObj) => {
+    setSurveillanceBatches(prev => prev.map(b => {
+      if (b.id === batchId) {
+        const updatedSnapshots = b.snapshots.map(s => {
+          if (s.id === snapshotId) {
+            return {
+              ...s,
+              imageUrl: imageObj?.dataUrl || imageObj,
+              imageMeta: typeof imageObj === 'object' ? imageObj : { uploadedAt: new Date().toISOString() },
+            };
+          }
+          return s;
+        });
+        return {
+          ...b,
+          snapshots: updatedSnapshots,
+        };
+      }
+      return b;
+    }));
+    showToast('Snapshot photo uploaded successfully!');
+  };
+
+  const removeSnapshotImage = (batchId, snapshotId) => {
+    setSurveillanceBatches(prev => prev.map(b => {
+      if (b.id === batchId) {
+        const updatedSnapshots = b.snapshots.map(s => {
+          if (s.id === snapshotId) {
+            const { imageUrl, imageMeta, ...rest } = s;
+            return rest;
+          }
+          return s;
+        });
+        return {
+          ...b,
+          snapshots: updatedSnapshots,
+        };
+      }
+      return b;
+    }));
+    showToast('Snapshot photo removed.');
+  };
+
+  const addBatchEvidenceImages = (batchId, newImages) => {
+    const imagesToAdd = Array.isArray(newImages) ? newImages : [newImages];
+    setSurveillanceBatches(prev => prev.map(b => {
+      if (b.id === batchId) {
+        const existing = Array.isArray(b.evidenceImages) ? b.evidenceImages : [];
+        return {
+          ...b,
+          evidenceImages: [...existing, ...imagesToAdd],
+        };
+      }
+      return b;
+    }));
+    showToast(`Added ${imagesToAdd.length} audit evidence photo${imagesToAdd.length > 1 ? 's' : ''}`);
+  };
+
+  const removeBatchEvidenceImage = (batchId, imageIndex) => {
+    setSurveillanceBatches(prev => prev.map(b => {
+      if (b.id === batchId) {
+        const existing = Array.isArray(b.evidenceImages) ? b.evidenceImages : [];
+        return {
+          ...b,
+          evidenceImages: existing.filter((_, idx) => idx !== imageIndex),
+        };
+      }
+      return b;
+    }));
+    showToast('Evidence photo removed.');
+  };
+
+  const addSurveillanceBatch = (newBatch) => {
+    setSurveillanceBatches(prev => [newBatch, ...prev]);
+    showToast(`New surveillance batch (${newBatch.hourSlot}) created successfully!`);
+  };
+
+  const deleteSurveillanceBatch = (batchId) => {
+    setSurveillanceBatches(prev => prev.filter(b => b.id !== batchId));
+    showToast('Surveillance batch removed.');
+  };
+
+  const submitHourlySurveillanceBatch = (batchId, overallAssessment, actionsTaken, evidenceImages) => {
     const batch = surveillanceBatches.find(b => b.id === batchId);
     if (!batch) return { success: false };
 
@@ -495,6 +577,7 @@ export const AppProvider = ({ children }) => {
       customerNotified: true,
       overallAssessment: overallAssessment || batch.overallAssessment,
       actionsTaken: actionsTaken || batch.actionsTaken,
+      evidenceImages: evidenceImages !== undefined ? evidenceImages : (batch.evidenceImages || []),
     };
 
     setSurveillanceBatches(prev => prev.map(b => b.id === batchId ? updatedBatch : b));
@@ -585,7 +668,13 @@ export const AppProvider = ({ children }) => {
         addFeedbackComment,
         replyToComment,
         // Surveillance Actions
+        addSurveillanceBatch,
+        deleteSurveillanceBatch,
         updateSnapshotVerification,
+        uploadSnapshotImage,
+        removeSnapshotImage,
+        addBatchEvidenceImages,
+        removeBatchEvidenceImage,
         submitHourlySurveillanceBatch,
         // Notification Actions
         triggerNotification,
